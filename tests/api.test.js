@@ -198,3 +198,23 @@ test('gelir, gider ve virman', async () => {
   const g = await get('/api/rapor/gelirgider');
   assert.ok(g.satirlar.some((r) => r.kategori === 'Kira' && r.gider === 1000));
 });
+
+test('yedek indir ve geri yükle', async () => {
+  const yedek = Buffer.from(await get('/api/yedek'));
+  assert.equal(yedek.subarray(0, 15).toString(), 'SQLite format 3');
+  const once = await bakiye(musteri);
+  await post('/api/cariler/' + musteri + '/dekont', { yon: 'borc', tutar: 999 });
+  assert.equal(await bakiye(musteri), once + 999);
+
+  const fd = new FormData();
+  fd.append('dosya', new Blob([yedek]), 'yedek.db');
+  const res = await fetch(base + '/api/yedek', { method: 'POST', body: fd, headers: { cookie } });
+  assert.equal(res.status, 200);
+  assert.equal(await bakiye(musteri), once);
+
+  const bozuk = new FormData();
+  bozuk.append('dosya', new Blob([Buffer.from('bozuk dosya')]), 'x.db');
+  const r2 = await fetch(base + '/api/yedek', { method: 'POST', body: bozuk, headers: { cookie } });
+  assert.equal(r2.status, 400);
+  assert.equal(await bakiye(musteri), once);
+});
