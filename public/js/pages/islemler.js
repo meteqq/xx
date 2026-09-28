@@ -1,6 +1,7 @@
 import { get, del } from '../api.js';
 import { e, $, icon, tarih, toast, onayla, tablo, tabloBagla, debounce, qs } from '../ui.js';
 import { makbuzYazdir } from '../yazdir.js';
+import { ciktiDugmeleri } from '../cikti.js';
 import { CEK_DURUM } from '../sabitler.js';
 
 export async function liste(ctx) {
@@ -39,7 +40,7 @@ export async function detay(ctx) {
   const makbuzluk = ['tahsilat', 'odeme'].includes(i.tur);
   ctx.el.innerHTML = `
     <div class="page-h"><h1>${e(i.tur_ad)} <span class="muted">#${i.id}</span></h1><div class="actions">
-      ${makbuzluk ? `<button class="btn" id="makbuz">${icon('print')} Makbuz</button>` : ''}
+      ${makbuzluk ? '<span id="m-cikti"></span>' : ''}
       ${i.fatura ? `<a class="btn" href="#/fatura/${i.fatura.id}">${icon('invoice')} Fatura</a>` : ''}
       <button class="btn danger-text" id="iptal">${icon('undo')} Geri Al</button>
     </div></div>
@@ -75,7 +76,14 @@ export async function detay(ctx) {
       ], satirlar: i.stok,
     })}</div>` : ''}`;
 
-  $('#makbuz')?.addEventListener('click', () => makbuzYazdir(i));
+  if (makbuzluk) {
+    ciktiDugmeleri($('#m-cikti'), {
+      pdf: `/api/islemler/${i.id}/pdf`,
+      yazdir: () => makbuzYazdir(i),
+      baslik: i.tur === 'tahsilat' ? 'Tahsilat Makbuzu' : 'Ödeme Makbuzu',
+      metin: `Sayın ${i.cari[0].unvan}, ${i.tur === 'tahsilat' ? 'tahsilat' : 'ödeme'} makbuzunuz ektedir.`,
+    });
+  }
   $('#iptal').addEventListener('click', async () => {
     if (!await onayla('İşlem geri alınsın mı?', { ok: 'Geri Al', tehlikeli: true })) return;
     try {

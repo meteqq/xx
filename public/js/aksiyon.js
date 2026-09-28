@@ -5,6 +5,7 @@ import { hesapIslemFormu } from './pages/kasa.js';
 import { cariFormu } from './pages/cariler.js';
 import { urunFormu } from './pages/stok.js';
 import { satisAc } from './pages/satis.js';
+import { faturaAc } from './pages/fatura.js';
 
 export const YENI = [
   ['satis', 'cash', 'Satış'],
@@ -32,8 +33,7 @@ export function aksiyon(ad, veri = {}, yenile = () => {}) {
       return hesapIslemFormu(ad, veri.hesap, yenile);
     case 'fatura-satis':
     case 'fatura-alis':
-      location.hash = `#/fatura/yeni?tur=${ad.slice(7)}${veri.cari ? `&cari=${veri.cari}` : ''}`;
-      return null;
+      return faturaAc({ tur: ad.slice(7), cariId: veri.cari, onKaydet: yenile });
     case 'cari-musteri':
     case 'cari-tedarikci':
       return cariFormu(null, { tip: ad.slice(5) });

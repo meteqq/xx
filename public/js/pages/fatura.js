@@ -1,9 +1,10 @@
 import { get, post, put, del } from '../api.js';
-import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, tablo, tabloBagla, debounce, qs } from '../ui.js';
+import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, modal, tablo, tabloBagla, debounce, qs } from '../ui.js';
 import { FATURA_TUR, KDV_ORANLARI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { urunFormu } from './stok.js';
 import { faturaYazdir, fisYazdir } from '../yazdir.js';
+import { ciktiDugmeleri } from '../cikti.js';
 
 export async function liste(ctx) {
   const tur = ctx.query.tur === 'alis' ? 'alis' : 'satis';
@@ -45,7 +46,7 @@ export async function goster(ctx) {
   ctx.el.innerHTML = `
     ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">İptal edildi</div>' : ''}
     <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
-      <button class="btn" id="yazdir">${icon('print')} Yazdır</button>
+      <span id="f-cikti"></span>
       ${f.iptal || f.kaynak === 'netsis' ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
       <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>`}
     </div></div>
@@ -77,9 +78,15 @@ export async function goster(ctx) {
       ${Object.entries(kdvGrup).map(([k, v]) => `<div><span>KDV %${k}</span><span class="num">${sayi(v)}</span></div>`).join('')}
       <div class="g"><span>Genel Toplam</span><span class="num">${tl(f.genel_toplam)}</span></div>
     </div></div></div>`;
-  $('#yazdir').addEventListener('click', () => (f.belge_tipi === 'fis' ? fisYazdir(f) : faturaYazdir(f)));
+  ciktiDugmeleri($('#f-cikti'), {
+    pdf: `/api/faturalar/${f.id}/pdf`,
+    yazdir: () => (f.belge_tipi === 'fis' ? fisYazdir(f) : faturaYazdir(f)),
+    baslik: `${f.tur_ad} ${f.no}`,
+    metin: `Sayın ${f.unvan}, ${f.no} numaralı ${f.tur_ad.toLocaleLowerCase('tr-TR')} ektedir. Tutar: ${tl(f.genel_toplam)}.`,
+    telefon: f.telefon,
+  });
   $('#diger')?.addEventListener('click', (ev) => menu('Diğer', [
-    ['Düzenle', 'edit', () => { location.hash = `#/fatura/${f.id}/duzenle`; }],
+    ['Düzenle', 'edit', () => faturaAc({ id: f.id, onKaydet: () => ctx.yenile() })],
     ['İptal et', 'trash', async () => {
       if (!await onayla('Fatura iptal edilsin mi?', { ok: 'İptal Et', tehlikeli: true })) return;
       await del(`/faturalar/${f.id}`);
@@ -87,6 +94,18 @@ export async function goster(ctx) {
       ctx.yenile();
     }, true],
   ], ev.currentTarget));;
+}
+
+/** Faturayı sayfadan ayrılmadan açılır pencerede oluşturur / düzenler. */
+export async function faturaAc({ tur = 'satis', cariId, id, onKaydet } = {}) {
+  const m = modal({ title: 'Fatura', wide: 'xl', body: '<div class="spin"></div>' });
+  m.el.querySelector('.modal').classList.add('fatura-modal');
+  await form({
+    el: m.body, params: [id], query: { tur, cari: cariId }, modal: m, onKaydet,
+    guncel: () => document.body.contains(m.el),
+    baslik: (t) => { $('.modal-h h2', m.el).textContent = t; },
+  });
+  return m;
 }
 
 export async function form(ctx) {
@@ -127,7 +146,7 @@ export async function form(ctx) {
     </div>
     <div class="sticky-save">
       <div style="flex:1" class="mobile-only"><div id="gt-m" class="num" style="font-size:1.2rem;font-weight:800"></div></div>
-      <a class="btn desk-only-inline" href="${duzenle ? `#/fatura/${duzenle}` : `#/faturalar?tur=${taban}`}">Vazgeç</a>
+      ${ctx.modal ? '<button class="btn desk-only-inline" data-close>Vazgeç</button>' : `<a class="btn desk-only-inline" href="${duzenle ? `#/fatura/${duzenle}` : `#/faturalar?tur=${taban}`}">Vazgeç</a>`}
       <button class="btn primary lg" id="kaydet">${icon('check')} Kaydet</button>
     </div>
   </div>`;
@@ -269,8 +288,14 @@ export async function form(ctx) {
     btn.disabled = true;
     try {
       const { id } = duzenle ? await put(`/faturalar/${duzenle}`, body) : await post('/faturalar', body);
-      toast('Fatura kaydedildi', 'ok');
-      location.hash = `#/fatura/${id}`;
+      if (ctx.modal) {
+        ctx.modal.close();
+        toast('Fatura kaydedildi', 'ok', { etiket: 'Görüntüle', fn: () => { location.hash = `#/fatura/${id}`; } });
+        ctx.onKaydet?.(id);
+      } else {
+        toast('Fatura kaydedildi', 'ok');
+        location.hash = `#/fatura/${id}`;
+      }
     } catch (err) {
       toast(err.message, 'err');
       btn.disabled = false;

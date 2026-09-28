@@ -1,8 +1,9 @@
 import { get, hesaplar } from '../api.js';
-import { e, $, $$, icon, tablo, tabloBagla, qs, indir, ayBasi, yilBasi, bugun, toast } from '../ui.js';
+import { e, $, $$, icon, tablo, tabloBagla, qs, ayBasi, yilBasi, bugun } from '../ui.js';
 import { CEK_DURUM, FATURA_TUR } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { raporYazdir, ekstreYazdir } from '../yazdir.js';
+import { ciktiDugmeleri } from '../cikti.js';
 
 const tarihler = (bas) => [
   { name: 'bas', label: 'Başlangıç', type: 'date', value: bas },
@@ -55,8 +56,7 @@ export async function rapor(ctx) {
 
   ctx.el.innerHTML = `
     <div class="page-h"><h1>${e(tanim.ad)}</h1><div class="actions">
-      <button class="btn" id="pr">${icon('print')} Yazdır</button>
-      <button class="btn" id="xl">${icon('excel')} Excel</button></div></div>
+      <div id="r-cikti"></div></div></div>
     ${tanim.filtre.length ? `<div class="card"><div class="card-b"><div class="form-grid" id="filtre">${tanim.filtre.map((f) => {
       if (f.type === 'cari') return `<label class="f" style="grid-column:span 2"><span>${f.label}</span><div id="f-cari"></div></label>`;
       if (f.type === 'hesap') return `<label class="f"><span>${f.label}</span><select name="hesap_id">${hs.map((h) => `<option value="${h.id}" ${String(h.id) === String(q.hesap_id) ? 'selected' : ''}>${e(h.ad)}</option>`).join('')}</select></label>`;
@@ -91,6 +91,16 @@ export async function rapor(ctx) {
     }
     if (!ctx.guncel()) return;
     const kol = son.kolonlar.map((k) => (k.key === 'aciklama' ? { ...k, main: true } : k));
+    const rp = son;
+    ciktiDugmeleri($('#r-cikti'), {
+      pdf: `/api/rapor/${ad}/pdf?${params()}`,
+      excel: `/api/rapor/${ad}/excel?${params()}`,
+      yazdir: () => (ad === 'ekstre' ? ekstreYazdir : raporYazdir)(rp),
+      baslik: rp.baslik,
+      metin: ad === 'ekstre' && rp.cari ? `Sayın ${rp.cari.unvan}, cari hesap ekstreniz ektedir.` : rp.baslik,
+      telefon: rp.cari?.telefon,
+      eposta: rp.cari?.eposta,
+    });
     $('#sonuc').innerHTML = tablo({ ...son, kolonlar: kol }, { onRow: true, bos: 'Kayıt yok' });
     tabloBagla($('#sonuc'), son.satirlar, (s) => {
       if (ad === 'ekstre') { if (s.fatura_id) location.hash = `#/fatura/${s.fatura_id}`; else if (s.islem_id) location.hash = `#/islem/${s.islem_id}`; }
@@ -102,13 +112,5 @@ export async function rapor(ctx) {
     });
   }
   $$('#filtre [name]').forEach((i) => i.addEventListener('change', yukle));
-  $('#pr').addEventListener('click', () => {
-    if (!son) return toast('Önce raporu oluşturun', 'err');
-    (ad === 'ekstre' ? ekstreYazdir : raporYazdir)(son);
-  });
-  $('#xl').addEventListener('click', () => {
-    if (!son) return toast('Önce raporu oluşturun', 'err');
-    indir(`/api/rapor/${ad}/excel?${params()}`);
-  });
   await yukle();
 }

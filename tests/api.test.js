@@ -184,6 +184,9 @@ test('raporlar ve Excel', async () => {
     assert.ok(Array.isArray(r.satirlar), ad);
   }
   await get(`/api/rapor/hesap?hesap_id=${banka}`);
+  for (const u of [`/api/rapor/ekstre/pdf?cari_id=${musteri}`, '/api/rapor/bakiye/pdf', '/api/rapor/cek/pdf']) {
+    assert.equal(Buffer.from(await get(u)).subarray(0, 4).toString(), '%PDF', u);
+  }
   const x = await get(`/api/rapor/ekstre/excel?cari_id=${musteri}`);
   assert.equal(Buffer.from(x).subarray(0, 2).toString(), 'PK');
   const o = await get('/api/ozet');
@@ -255,6 +258,8 @@ test('hızlı satış: nakit, kart, veresiye, parçalı ve iptal', async () => {
   assert.equal(await bakiye(musteri), b0 + 2400);
   assert.equal(await hesapBakiye(kasa), kasaSonra - 1000);
 
+  assert.equal(Buffer.from(await get(`/api/faturalar/${s1.fatura_id}/pdf`)).subarray(0, 4).toString(), '%PDF');
+  assert.equal(Buffer.from(await get(`/api/islemler/${s1.tahsilat_islem_id}/pdf`)).subarray(0, 4).toString(), '%PDF');
   const g = await get('/api/rapor/gunsonu');
   assert.ok(g.satirlar.some((r) => r.kalem.startsWith('Satış')));
 });

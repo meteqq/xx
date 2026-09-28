@@ -1,7 +1,8 @@
 import { get, post, put, del } from '../api.js';
-import { e, $, $$, icon, tl, tarih, bakiye, toast, formModal, onayla, menu, tablo, tabloBagla, autocomplete, debounce, qs, indir, bugun } from '../ui.js';
+import { e, $, $$, icon, tl, tarih, bakiye, toast, formModal, onayla, menu, tablo, tabloBagla, autocomplete, debounce, qs, bugun } from '../ui.js';
 import { CARI_TIP, DOVIZ, CEK_DURUM } from '../sabitler.js';
 import { ekstreYazdir } from '../yazdir.js';
+import { ciktiDugmeleri, gonder } from '../cikti.js';
 
 // ---------- Cari formu (başka sayfalardan da kullanılır) ----------
 export async function cariFormu(cari = null, { unvan, tip, onKaydet } = {}) {
@@ -142,6 +143,7 @@ export async function detay(ctx) {
         <button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')} Tahsilat Ekle</button>
         <button class="btn" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')} Ödeme Ekle</button>
         <button class="btn" data-aksiyon="fatura-${c.tip === 'tedarikci' ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')} Fatura</button>
+        <button class="btn purple" id="ekstre-gonder">${icon('share')} Ekstre Gönder</button>
         <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>
       </div>
     </div></div>
@@ -164,6 +166,7 @@ export async function detay(ctx) {
   }));
   tabs.hareket();
 
+  $('#ekstre-gonder').addEventListener('click', (ev) => gonder(ekstreCikti(c), ev.currentTarget));
   const dekont = () => formModal({
     title: 'Borç / Alacak Kaydı',
     alanlar: [
@@ -194,13 +197,23 @@ export async function detay(ctx) {
   ], ev.currentTarget));;
 }
 
+function ekstreCikti(c) {
+  const b = c.bakiye || 0;
+  return {
+    pdf: `/api/rapor/ekstre/pdf?cari_id=${c.id}`,
+    excel: `/api/rapor/ekstre/excel?cari_id=${c.id}`,
+    baslik: 'Cari Hesap Ekstresi',
+    metin: `Sayın ${c.unvan}, cari hesap ekstreniz ektedir. Güncel bakiye: ${tl(Math.abs(b), c.doviz)}${b > 0 ? ' borç' : b < 0 ? ' alacak' : ''}.`,
+    telefon: c.telefon,
+    eposta: c.eposta,
+  };
+}
+
 async function hareketTab(c) {
   const tab = $('#tab');
-  tab.innerHTML = `<div class="toolbar" style="margin-bottom:12px;justify-content:flex-end">
-      <button class="btn sm" id="pr">${icon('print')} Yazdır</button>
-      <button class="btn sm" id="xl">${icon('excel')} Excel</button>
-    </div><div id="ekstre"><div class="spin"></div></div>`;
+  tab.innerHTML = `<div id="ekstre-cikti" style="margin-bottom:12px"></div><div id="ekstre"><div class="spin"></div></div>`;
   const rapor = await get('/rapor/ekstre?' + qs({ cari_id: c.id }));
+  ciktiDugmeleri($('#ekstre-cikti'), { ...ekstreCikti(c), kucuk: true, yazdir: () => ekstreYazdir(rapor) });
   const satirlar = [...rapor.satirlar].reverse();
   $('#ekstre').innerHTML = tablo({
     ...rapor,
@@ -217,8 +230,6 @@ async function hareketTab(c) {
     if (s.fatura_id) location.hash = `#/fatura/${s.fatura_id}`;
     else if (s.islem_id) location.hash = `#/islem/${s.islem_id}`;
   });
-  $('#pr').addEventListener('click', () => ekstreYazdir(rapor));
-  $('#xl').addEventListener('click', () => indir('/api/rapor/ekstre/excel?' + qs({ cari_id: c.id })));
 }
 
 async function faturaTab(c) {

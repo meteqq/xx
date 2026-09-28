@@ -522,3 +522,9 @@ a.stat:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16, 32, 
 
 .kbd { font-size: .68rem; opacity: .75; border: 1px solid rgba(255, 255, 255, .45); border-radius: 3px; padding: 0 4px; margin-left: 4px; font-weight: 500; }
 @media (max-width: 899px) { .kbd { display: none; } }
+.cikti { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 640px) { .cikti { width: 100%; } .cikti .btn { flex: 1 1 calc(50% - 4px); } }
+
+.modal .sticky-save { bottom: -18px !important; margin: 0 -18px -18px; border-radius: 0; }
+.fatura-modal .card { border: 0; box-shadow: none; }
+.fatura-modal .card-b { padding: 0; }

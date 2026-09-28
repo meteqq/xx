@@ -4,11 +4,19 @@ const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const { db, replaceWith } = require('../db');
-const { hata, bugun, gunEkle, sec } = require('../util');
+const { hata, bugun, gunEkle, sec, dosyaAdi } = require('../util');
 const { odemeKaydet, islemIptal, SEKIL_AD } = require('../services/islem');
 const { satisKaydet } = require('../services/satis');
 const { rapor, CARI_TUR_AD, HESAP_TIP_AD } = require('../services/rapor');
 const { raporExcel } = require('../services/excel');
+const { raporPdf, ekstrePdf, makbuzPdf } = require('../services/pdf');
+
+function pdfGonder(res, buf, ad) {
+  const dosya = dosyaAdi(ad, 'pdf');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${dosya}"; filename*=UTF-8''${encodeURIComponent(dosya)}`);
+  res.send(buf);
+}
 
 const r = express.Router();
 const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 500 * 1024 * 1024 } });
@@ -58,8 +66,8 @@ r.get('/islemler', (req, res) => {
   })));
 });
 
-r.get('/islemler/:id', (req, res) => {
-  const i = db().prepare('SELECT * FROM islemler WHERE id = ?').get(req.params.id);
+function islemDetay(id) {
+  const i = db().prepare('SELECT * FROM islemler WHERE id = ?').get(id);
   if (!i) throw hata(404, 'İşlem bulunamadı');
   i.tur_ad = ISLEM_TUR_AD[i.tur] || i.tur;
   i.cari = db().prepare(`SELECT h.*, c.unvan, c.kod FROM cari_hareketler h JOIN cariler c ON c.id = h.cari_id
@@ -73,7 +81,15 @@ r.get('/islemler/:id', (req, res) => {
   i.bakiye = i.cari[0]
     ? db().prepare('SELECT COALESCE(SUM(borc - alacak), 0) b FROM cari_hareketler WHERE cari_id = ?').get(i.cari[0].cari_id).b
     : null;
-  res.json(i);
+  return i;
+}
+
+r.get('/islemler/:id', (req, res) => res.json(islemDetay(req.params.id)));
+
+r.get('/islemler/:id/pdf', async (req, res) => {
+  const i = islemDetay(req.params.id);
+  if (!['tahsilat', 'odeme'].includes(i.tur) || !i.cari.length) throw hata(400, 'Bu işlem için makbuz yok');
+  pdfGonder(res, await makbuzPdf(i), `Makbuz_${i.cari[0].unvan}_${i.tarih}`);
 });
 
 r.delete('/islemler/:id', (req, res) => {
@@ -167,12 +183,18 @@ r.get('/ara', (req, res) => {
 // --- Raporlar ---
 r.get('/rapor/:ad', (req, res) => res.json(rapor(req.params.ad, req.query)));
 
+r.get('/rapor/:ad/pdf', async (req, res) => {
+  const rp = rapor(req.params.ad, req.query);
+  const buf = req.params.ad === 'ekstre' ? await ekstrePdf(rp) : await raporPdf(rp);
+  pdfGonder(res, buf, req.params.ad === 'ekstre' ? `Ekstre_${rp.cari.unvan}_${bugun()}` : `${rp.baslik}_${bugun()}`);
+});
+
 r.get('/rapor/:ad/excel', async (req, res) => {
   const rp = rapor(req.params.ad, req.query);
   const buf = await raporExcel(rp, firma());
-  const ad = rp.baslik.replace(/[^\p{L}\p{N} -]/gu, '').replace(/\s+/g, '_');
+  const dosya = dosyaAdi(`${rp.cari ? 'Ekstre_' + rp.cari.unvan : rp.baslik}_${bugun()}`, 'xlsx');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="rapor.xlsx"; filename*=UTF-8''${encodeURIComponent(ad + '_' + bugun())}.xlsx`);
+  res.setHeader('Content-Disposition', `attachment; filename="${dosya}"; filename*=UTF-8''${encodeURIComponent(dosya)}`);
   res.send(Buffer.from(buf));
 });
 
@@ -212,3 +234,4 @@ r.post('/yedek', upload.single('dosya'), (req, res) => {
 });
 
 module.exports = r;
+

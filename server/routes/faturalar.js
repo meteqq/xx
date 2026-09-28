@@ -1,8 +1,9 @@
 const express = require('express');
 const { db } = require('../db');
-const { hata } = require('../util');
+const { hata, dosyaAdi } = require('../util');
 const { faturaKaydet, faturaGetir, sonrakiNo, TURLER } = require('../services/fatura');
 const { islemIptal } = require('../services/islem');
+const { faturaPdf } = require('../services/pdf');
 
 const r = express.Router();
 
@@ -24,6 +25,15 @@ r.get('/', (req, res) => {
 r.get('/yeni-no', (req, res) => res.json({ no: sonrakiNo(req.query.tur || 'satis', req.query.belge_tipi) }));
 
 r.get('/:id', (req, res) => res.json(faturaGetir(req.params.id)));
+
+r.get('/:id/pdf', async (req, res) => {
+  const f = faturaGetir(req.params.id);
+  const buf = await faturaPdf(f);
+  const dosya = dosyaAdi(`${f.tur_ad}_${f.no}`, 'pdf');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${dosya}"; filename*=UTF-8''${encodeURIComponent(dosya)}`);
+  res.send(buf);
+});
 
 r.post('/', (req, res) => res.status(201).json({ id: faturaKaydet(req.body || {}) }));
 

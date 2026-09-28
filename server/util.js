@@ -51,4 +51,12 @@ function sec(obj, alanlar) {
   return out;
 }
 
-module.exports = { hata, bugun, gunEkle, tutar, tarih, zorunlu, secenek, sec };
+/** Dosya adı: Türkçe harfler sadeleştirilir, güvenli karakterler bırakılır. */
+function dosyaAdi(ad, uzanti) {
+  const tr = { ı: 'i', İ: 'I', ş: 's', Ş: 'S', ğ: 'g', Ğ: 'G', ü: 'u', Ü: 'U', ö: 'o', Ö: 'O', ç: 'c', Ç: 'C' };
+  const temiz = String(ad).replace(/[ıİşŞğĞüÜöÖçÇ]/g, (c) => tr[c]).normalize('NFKD').replace(/[^\w .-]/g, '')
+    .trim().replace(/\s+/g, '_').slice(0, 120) || 'belge';
+  return `${temiz}.${uzanti}`;
+}
+
+module.exports = { dosyaAdi, hata, bugun, gunEkle, tutar, tarih, zorunlu, secenek, sec };

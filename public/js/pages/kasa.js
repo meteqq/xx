@@ -1,7 +1,8 @@
 import { get, post, put, del, hesaplar, hesapCacheTemizle } from '../api.js';
-import { e, $, $$, icon, tl, toast, formModal, onayla, menu, tablo, tabloBagla, qs, indir, ayBasi, bugun } from '../ui.js';
+import { e, $, $$, icon, tl, toast, formModal, onayla, menu, tablo, tabloBagla, qs, ayBasi, bugun } from '../ui.js';
 import { HESAP_TIP, DOVIZ } from '../sabitler.js';
 import { raporYazdir } from '../yazdir.js';
+import { ciktiDugmeleri } from '../cikti.js';
 
 function hesapFormu(h = null, varsayilanTip = 'banka', onKaydet) {
   const yeni = !h;
@@ -114,9 +115,7 @@ export async function detay(ctx) {
     <div class="card" style="margin-top:16px"><div class="card-b">
       <div class="toolbar" style="margin-bottom:12px">
         <input type="date" id="bas" value="${ayBasi()}"><input type="date" id="bit">
-        <span class="grow"></span>
-        <button class="btn sm" id="pr">${icon('print')} Yazdır</button>
-        <button class="btn sm" id="xl">${icon('excel')} Excel</button>
+        <span class="grow"></span><span id="h-cikti"></span>
       </div>
       <div id="defter"><div class="spin"></div></div>
     </div></div>`;
@@ -130,8 +129,13 @@ export async function detay(ctx) {
   };
   $('#bas').addEventListener('change', yukle);
   $('#bit').addEventListener('change', yukle);
-  $('#pr').addEventListener('click', () => raporYazdir(rapor));
-  $('#xl').addEventListener('click', () => indir('/api/rapor/hesap/excel?' + qs({ hesap_id: h.id, bas: $('#bas').value, bit: $('#bit').value })));
+  const cikti = () => {
+    const q = qs({ hesap_id: h.id, bas: $('#bas').value, bit: $('#bit').value });
+    ciktiDugmeleri($('#h-cikti'), { pdf: `/api/rapor/hesap/pdf?${q}`, excel: `/api/rapor/hesap/excel?${q}`, yazdir: () => raporYazdir(rapor), baslik: h.ad, kucuk: true });
+  };
+  cikti();
+  $('#bas').addEventListener('change', cikti);
+  $('#bit').addEventListener('change', cikti);
   $$('[data-islem]').forEach((b) => b.addEventListener('click', () => hesapIslemFormu(b.dataset.islem, h.id, () => ctx.yenile())));
   $('#diger').addEventListener('click', (ev) => menu('Diğer', [
     ['Düzenle', 'edit', () => hesapFormu(h, h.tip, () => ctx.yenile())],
