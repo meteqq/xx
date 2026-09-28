@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../db');
 const { hata, zorunlu, secenek, sec, tutar } = require('../util');
 const { dekontKaydet, tx } = require('../services/islem');
+const { cariUrunHareket } = require('../services/rapor');
 
 const r = express.Router();
 const ALANLAR = ['kod', 'unvan', 'tip', 'yetkili', 'telefon', 'telefon2', 'eposta', 'adres', 'il', 'ilce',
@@ -109,6 +110,8 @@ r.delete('/:id', (req, res) => {
   db().prepare('DELETE FROM cariler WHERE id = ?').run(id);
   res.json({ ok: true });
 });
+
+r.get('/:id/urun-hareket', (req, res) => res.json(cariUrunHareket(Number(req.params.id), req.query)));
 
 r.post('/:id/dekont', (req, res) => {
   const islem_id = dekontKaydet({ ...req.body, cari_id: req.params.id });

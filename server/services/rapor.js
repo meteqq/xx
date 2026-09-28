@@ -20,6 +20,23 @@ const CEK_DURUM_AD = {
   karsiliksiz: 'Karşılıksız', iade: 'İade', verildi: 'Ödenecek', odendi: 'Ödendi',
 };
 
+const miktarYazi = (m) => (Number.isInteger(m) ? String(m) : String(Math.round(m * 1000) / 1000).replace('.', ','));
+
+/** fatura id → "2 × Çimento, 1 × Kum +3" */
+function urunOzeti(ids) {
+  const ozet = new Map();
+  if (!ids.length) return ozet;
+  const kalemler = db().prepare(`SELECT fatura_id, aciklama, miktar FROM fatura_kalemleri
+    WHERE fatura_id IN (SELECT value FROM json_each(?)) ORDER BY fatura_id, id`).all(JSON.stringify(ids));
+  const grup = new Map();
+  for (const k of kalemler) (grup.get(k.fatura_id) || grup.set(k.fatura_id, []).get(k.fatura_id)).push(k);
+  for (const [id, ks] of grup) {
+    const ilk = ks.slice(0, 2).map((k) => `${miktarYazi(k.miktar)} × ${k.aciklama}`).join(', ');
+    ozet.set(id, ks.length > 2 ? `${ilk} +${ks.length - 2}` : ilk);
+  }
+  return ozet;
+}
+
 function ekstre(p) {
   const cari = db().prepare('SELECT * FROM cariler WHERE id = ?').get(p.cari_id);
   if (!cari) throw hata(404, 'Cari bulunamadı');
@@ -28,6 +45,10 @@ function ekstre(p) {
     .get(cari.id, bas).b;
   const rows = db().prepare(`SELECT * FROM cari_hareketler WHERE cari_id = ? AND tarih BETWEEN ? AND ?
     ORDER BY tarih, id`).all(cari.id, bas, bit);
+  // Satışla birlikte alınan tahsilat, ait olduğu fişe bağlanır; fiş/fatura satırlarına ürün özeti eklenir
+  const fisTahsilat = new Map(db().prepare('SELECT tahsilat_islem_id i, id FROM faturalar WHERE cari_id = ? AND tahsilat_islem_id IS NOT NULL')
+    .all(cari.id).map((r) => [r.i, r.id]));
+  const ozet = urunOzeti(rows.map((r) => r.fatura_id).filter(Boolean));
   let bakiye = devir;
   const satirlar = [];
   if (p.bas) satirlar.push({ tarih: p.bas, tur: 'Devir', aciklama: 'Önceki dönemden devir', borc: devir > 0 ? devir : 0, alacak: devir < 0 ? -devir : 0, bakiye: devir });
@@ -38,9 +59,10 @@ function ekstre(p) {
     tb += r.borc;
     ta += r.alacak;
     satirlar.push({
-      id: r.id, islem_id: r.islem_id, fatura_id: r.fatura_id, cek_id: r.cek_id,
+      id: r.id, islem_id: r.islem_id, fatura_id: r.fatura_id || fisTahsilat.get(r.islem_id) || null, cek_id: r.cek_id,
       tarih: r.tarih, vade: r.vade, belge_no: r.belge_no, tur: CARI_TUR_AD[r.tur] || r.tur,
-      odeme_sekli: r.odeme_sekli ? SEKIL_AD[r.odeme_sekli] : '', aciklama: r.aciklama,
+      odeme_sekli: r.odeme_sekli ? SEKIL_AD[r.odeme_sekli] : '',
+      aciklama: r.fatura_id && ozet.has(r.fatura_id) ? `${r.aciklama || ''} · ${ozet.get(r.fatura_id)}` : r.aciklama,
       borc: r.borc, alacak: r.alacak, bakiye,
     });
   }
@@ -272,12 +294,34 @@ function faturaOzet(p) {
 
 function urunSatis(p) {
   const { bas, bit } = aralik(p);
-  const satirlar = db().prepare(`SELECT COALESCE(u.kod, '') kod, k.aciklama ad, k.birim,
-      SUM(CASE WHEN f.tur = 'satis' THEN k.miktar ELSE -k.miktar END) miktar,
-      SUM(CASE WHEN f.tur = 'satis' THEN k.tutar ELSE -k.tutar END) tutar
+  const cari = p.cari_id ? db().prepare('SELECT * FROM cariler WHERE id = ?').get(p.cari_id) : null;
+  if (p.cari_id && !cari) throw hata(404, 'Cari bulunamadı');
+  const alis = cari?.tip === 'tedarikci';
+  const [ana, iade] = alis ? ['alis', 'alis_iade'] : ['satis', 'satis_iade'];
+  const satirlar = db().prepare(`SELECT MIN(k.urun_id) urun_id, COALESCE(u.kod, '') kod, k.aciklama ad, k.birim,
+      SUM(CASE WHEN f.tur = @ana THEN k.miktar ELSE -k.miktar END) miktar,
+      SUM(CASE WHEN f.tur = @ana THEN k.tutar ELSE -k.tutar END) tutar,
+      SUM(CASE WHEN f.tur = @ana THEN k.tutar + k.kdv_tutar ELSE -(k.tutar + k.kdv_tutar) END) toplam,
+      MAX(f.tarih) son_tarih, COUNT(DISTINCT f.id) adet
     FROM fatura_kalemleri k JOIN faturalar f ON f.id = k.fatura_id LEFT JOIN urunler u ON u.id = k.urun_id
-    WHERE f.iptal = 0 AND f.tur IN ('satis','satis_iade') AND f.tarih BETWEEN ? AND ?
-    GROUP BY COALESCE(k.urun_id, k.aciklama) ORDER BY tutar DESC`).all(bas, bit);
+    WHERE f.iptal = 0 AND f.tur IN (@ana, @iade) AND f.tarih BETWEEN @bas AND @bit ${cari ? 'AND f.cari_id = @cari' : ''}
+    GROUP BY COALESCE(k.urun_id, k.aciklama) ORDER BY ${cari ? 'son_tarih DESC, toplam DESC' : 'tutar DESC'}`)
+    .all({ ana, iade, bas, bit, cari: cari?.id });
+  if (cari) {
+    return {
+      baslik: `${alis ? 'Alınan' : 'Verilen'} Ürünler - ${cari.unvan}`,
+      alt: aralikYazi(p) + ' (iadeler düşülmüş, KDV dahil)',
+      kolonlar: [
+        { key: 'ad', label: 'Ürün / Hizmet' },
+        { key: 'miktar', label: 'Miktar', type: 'number' },
+        { key: 'birim', label: 'Birim' },
+        { key: 'son_tarih', label: 'Son Tarih', type: 'date' },
+        { key: 'toplam', label: 'Tutar', type: 'money' },
+      ],
+      satirlar,
+      toplam: { toplam: satirlar.reduce((a, r) => a + r.toplam, 0) },
+    };
+  }
   return {
     baslik: 'Ürün Bazında Satış Raporu',
     alt: aralikYazi(p) + ' (iadeler düşülmüş, KDV hariç)',
@@ -291,6 +335,19 @@ function urunSatis(p) {
     satirlar,
     toplam: { tutar: satirlar.reduce((a, r) => a + r.tutar, 0) },
   };
+}
+
+/** Bir carinin belirli bir ürünü hangi fiş/faturayla, ne zaman, kaç adet aldığı */
+function cariUrunHareket(cariId, { urun_id: urunId, ad, bas, bit } = {}) {
+  const a = aralik({ bas, bit });
+  return db().prepare(`SELECT f.id fatura_id, f.no, f.tarih, f.tur, f.belge_tipi, k.aciklama ad, k.birim,
+      CASE WHEN f.tur LIKE '%iade' THEN -k.miktar ELSE k.miktar END miktar,
+      ROUND((k.tutar + k.kdv_tutar) * 1.0 / k.miktar) birim_fiyat,
+      CASE WHEN f.tur LIKE '%iade' THEN -(k.tutar + k.kdv_tutar) ELSE k.tutar + k.kdv_tutar END toplam
+    FROM fatura_kalemleri k JOIN faturalar f ON f.id = k.fatura_id
+    WHERE f.iptal = 0 AND f.cari_id = ? AND f.tarih BETWEEN ? AND ?
+      AND ${urunId ? 'k.urun_id = ?' : 'k.urun_id IS NULL AND k.aciklama = ?'}
+    ORDER BY f.tarih DESC, f.id DESC`).all(cariId, a.bas, a.bit, urunId ? Number(urunId) : ad);
 }
 
 function gelirGider(p) {
@@ -387,4 +444,4 @@ function rapor(ad, p) {
   return fn(p || {});
 }
 
-module.exports = { rapor, CARI_TUR_AD, HESAP_TIP_AD, CEK_DURUM_AD, trTarih };
+module.exports = { rapor, cariUrunHareket, CARI_TUR_AD, HESAP_TIP_AD, CEK_DURUM_AD, trTarih };

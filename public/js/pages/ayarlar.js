@@ -1,5 +1,5 @@
 import { get, put, post, api, ayarlar as ayarGetir } from '../api.js';
-import { $, icon, toast, onayla, formOku, alanHtml, indir, temaDegistir } from '../ui.js';
+import { $, icon, toast, onayla, formOku, alanHtml, indir, temaDegistir, bekle } from '../ui.js';
 
 const FIRMA = [
   { name: 'firma_unvan', label: 'Firma ünvanı', full: true },
@@ -11,6 +11,11 @@ const FIRMA = [
   { name: 'firma_iban', label: 'IBAN', full: true },
   { name: 'fatura_seri', label: 'Fatura seri öneki' },
   { name: 'fatura_notu', label: 'Fatura alt notu', type: 'textarea', full: true },
+];
+
+const SATIS = [
+  { name: 'kdv_orani', label: 'Varsayılan KDV oranı', type: 'select', options: [0, 1, 10, 20].map((k) => [String(k), '%' + k]) },
+  { name: 'satis_kdv', label: 'Satışta fiyatlar', type: 'select', options: [['sor', 'Her satışta sor'], ['dahil', 'KDV dahil'], ['haric', 'KDV hariç (üzerine eklenir)']] },
 ];
 
 export async function sayfa(ctx) {
@@ -25,6 +30,10 @@ export async function sayfa(ctx) {
         <div style="margin-top:14px;text-align:right"><button class="btn primary" id="firma-kaydet">Kaydet</button></div>
       </div></div>
       <div>
+        <div class="card"><div class="card-h"><h3>Satış ve KDV</h3></div><div class="card-b">
+          <form id="satis-ayar" class="form-grid">${SATIS.map((f) => alanHtml(f, { kdv_orani: '20', satis_kdv: 'sor', ...a })).join('')}</form>
+          <div style="margin-top:14px;text-align:right"><button class="btn primary" id="satis-kaydet">Kaydet</button></div>
+        </div></div>
         <div class="card"><div class="card-h"><h3>Yedekleme</h3></div><div class="card-b">
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn primary" id="yedek-al">${icon('download')} Yedek İndir</button>
@@ -52,6 +61,18 @@ export async function sayfa(ctx) {
     const marka = $('.sidebar .brand small');
     if (marka) marka.textContent = v.firma_unvan;
     toast('Firma bilgileri kaydedildi', 'ok');
+  });
+  $('#satis-kaydet').addEventListener('click', async (ev) => {
+    const bitti = bekle(ev.currentTarget);
+    try {
+      await put('/ayarlar', formOku($('#satis-ayar'), SATIS));
+      await ayarGetir(true);
+      toast('Kaydedildi', 'ok');
+    } catch (err) {
+      toast(err.message, 'err');
+    } finally {
+      bitti();
+    }
   });
   $('#yedek-al').addEventListener('click', () => indir('/api/yedek'));
   $('#tema').addEventListener('click', temaDegistir);

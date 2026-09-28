@@ -80,8 +80,7 @@ export async function makbuzYazdir(i) {
     <tbody>${satirlar.map((h) => `<tr><td>${e(h.odeme_sekli_ad)}</td><td>${e(h.aciklama || '')}</td><td>${tarih(h.vade)}</td><td class="r">${sayi(h.borc + h.alacak)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="3">TOPLAM</td><td class="r">${tl(toplam)}</td></tr></tfoot></table>
     <p>Yalnız <b>${e(yaziyla(toplam))}</b> ${tahsilat ? 'tahsil edilmiştir' : 'ödenmiştir'}.</p>
-    ${i.bakiye !== null ? `<p class="note">İşlem sonrası güncel bakiye: <b>${tl(Math.abs(i.bakiye))} ${i.bakiye > 0 ? '(Borçlu)' : i.bakiye < 0 ? '(Alacaklı)' : ''}</b></p>` : ''}
-    <div class="sign"><div>Teslim Eden</div><div>Teslim Alan</div></div>`;
+    ${i.bakiye !== null ? `<p class="note">İşlem sonrası güncel bakiye: <b>${tl(Math.abs(i.bakiye))} ${i.bakiye > 0 ? '(Borçlu)' : i.bakiye < 0 ? '(Alacaklı)' : ''}</b></p>` : ''}`;
   yazdir(html + '<div style="border-top:1px dashed #999;margin:30px 0"></div>' + html);
 }
 

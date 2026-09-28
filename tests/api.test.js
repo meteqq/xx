@@ -263,3 +263,48 @@ test('hızlı satış: nakit, kart, veresiye, parçalı ve iptal', async () => {
   const g = await get('/api/rapor/gunsonu');
   assert.ok(g.satirlar.some((r) => r.kalem.startsWith('Satış')));
 });
+
+test('satış fişi: ekstre bağlantısı, ürün özeti, müşteriye verilen ürünler ve KDV hariç', async () => {
+  const c = (await post('/api/cariler', { unvan: 'Fiş Test Müşterisi', tip: 'musteri' })).id;
+  const cimento = (await post('/api/urunler', { ad: 'Çimento', satis_fiyat: 10000, kdv: 20, acilis_miktar: 100 })).id;
+  const kum = (await post('/api/urunler', { ad: 'Kum', birim: 'Kg', satis_fiyat: 500, kdv: 20, acilis_miktar: 100 })).id;
+  const s = await post('/api/satis', { odeme: 'nakit', cari_id: c, kalemler: [
+    { urun_id: cimento, aciklama: 'Çimento', miktar: 2, birim_fiyat: 10000, kdv: 20 },
+    { urun_id: kum, aciklama: 'Kum', miktar: 3, birim: 'Kg', birim_fiyat: 500, kdv: 20 },
+  ] });
+  assert.equal(s.toplam, 21500);
+
+  // Ekstredeki fiş ve tahsilat satırları aynı fişe bağlanır; fiş satırı ürünleri özetler
+  const ek = await get(`/api/rapor/ekstre?cari_id=${c}`);
+  assert.equal(ek.satirlar.length, 2);
+  assert.ok(ek.satirlar.every((r) => r.fatura_id === s.fatura_id));
+  assert.match(ek.satirlar.find((r) => r.borc).aciklama, /2 × Çimento, 3 × Kum/);
+
+  // Fiş ödeme bilgisini taşır
+  const f = await get(`/api/faturalar/${s.fatura_id}`);
+  assert.deepEqual(f.odemeler, [{ odeme_sekli: 'nakit', tutar: 21500 }]);
+
+  // KDV hariç: fiyatların üzerine KDV eklenir
+  const s2 = await post('/api/satis', { odeme: 'veresiye', cari_id: c, kdv_dahil: false,
+    kalemler: [{ urun_id: cimento, aciklama: 'Çimento', miktar: 1, birim_fiyat: 10000, kdv: 20 }] });
+  assert.equal(s2.toplam, 12000);
+  assert.deepEqual((await get(`/api/faturalar/${s2.fatura_id}`)).odemeler, []);
+
+  // Müşteriye verilen ürünler: ürün bazında toplam adet ve KDV dahil tutar
+  const u = await get(`/api/rapor/urun?cari_id=${c}`);
+  const cim = u.satirlar.find((r) => r.ad === 'Çimento');
+  assert.equal(cim.miktar, 3);
+  assert.equal(cim.toplam, 20000 + 12000);
+  assert.equal(cim.adet, 2);
+  assert.equal(u.satirlar.find((r) => r.ad === 'Kum').miktar, 3);
+  assert.equal(u.satirlar.length, 2);
+  const h = await get(`/api/cariler/${c}/urun-hareket?urun_id=${cimento}`);
+  assert.deepEqual(h.map((r) => r.miktar), [1, 2]);
+  assert.equal(Buffer.from(await get(`/api/rapor/urun/pdf?cari_id=${c}`)).subarray(0, 4).toString(), '%PDF');
+
+  // Ayarlar: varsayılan KDV oranı
+  await api('PUT', '/api/ayarlar', { kdv_orani: '10', satis_kdv: 'dahil' });
+  assert.equal((await get('/api/ayarlar')).kdv_orani, '10');
+  await assert.rejects(api('PUT', '/api/ayarlar', { kdv_orani: '150' }), /KDV/);
+  await assert.rejects(api('PUT', '/api/ayarlar', { satis_kdv: 'x' }), /KDV/);
+});

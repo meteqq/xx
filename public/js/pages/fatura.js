@@ -1,6 +1,6 @@
-import { get, post, put, del } from '../api.js';
+import { get, post, put, del, varsayilanKdv } from '../api.js';
 import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, modal, bekle, tablo, tabloBagla, debounce, qs } from '../ui.js';
-import { FATURA_TUR, KDV_ORANLARI } from '../sabitler.js';
+import { FATURA_TUR, KDV_ORANLARI, ODEME_SEKLI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { urunFormu } from './stok.js';
 import { faturaYazdir, fisYazdir } from '../yazdir.js';
@@ -30,41 +30,45 @@ export async function liste(ctx) {
       ],
       satirlar: rows,
     }, { onRow: true, bos: 'Kayıt yok' });
-    tabloBagla($('#liste'), rows, (s) => { location.hash = `#/fatura/${s.id}`; });
+    tabloBagla($('#liste'), rows, (s) => faturaPopup(s.id, { onDegis: yukle }));
   };
   $('#q').addEventListener('input', debounce(yukle));
   await yukle();
 }
 
-export async function goster(ctx) {
-  const f = await get(`/faturalar/${ctx.params[0]}`);
-  if (!ctx.guncel()) return;
-  ctx.baslik(`${f.tur_ad} ${f.no}`, `#/faturalar?tur=${f.tur.startsWith('alis') ? 'alis' : 'satis'}`);
-  const tahsil = f.tur === 'satis' || f.tur === 'alis_iade';
+/** Fiş / fatura içeriği: cari, belge bilgisi, ödeme, kalemler ve toplamlar */
+function detayHtml(f, { cariLink = true } = {}) {
   const kdvGrup = {};
   for (const k of f.kalemler) kdvGrup[k.kdv] = (kdvGrup[k.kdv] || 0) + k.kdv_tutar;
-  ctx.el.innerHTML = `
+  const fis = f.belge_tipi === 'fis';
+  const odenen = (f.odemeler || []).reduce((a, o) => a + o.tutar, 0);
+  const odeme = f.belge_tipi === 'fis' || odenen
+    ? [...f.odemeler.map((o) => `${e(ODEME_SEKLI[o.odeme_sekli]?.[0] || 'Diğer')} <b class="num">${tl(o.tutar)}</b>`),
+      ...(f.genel_toplam - odenen > 0 ? [`Veresiye <b class="num">${tl(f.genel_toplam - odenen)}</b>`] : [])].join(' · ')
+    : '';
+  return `
     ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">İptal edildi</div>' : ''}
-    <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
-      <span id="f-cikti"></span>
-      ${f.iptal || f.kaynak === 'netsis' ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
-      <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>`}
-    </div></div>
-    <div class="grid g2">
-      <div class="card"><div class="card-b"><dl class="kv">
-        <dt>Cari</dt><dd><a href="#/cari/${f.cari_id}"><b>${e(f.unvan)}</b></a></dd>
-        ${f.vergi_no || f.tc_no ? `<dt>Vergi D. / No</dt><dd>${e(f.vergi_dairesi || '')} ${e(f.vergi_no || f.tc_no)}</dd>` : ''}
-        ${f.adres ? `<dt>Adres</dt><dd>${e(f.adres)} ${e(f.ilce || '')} ${e(f.il || '')}</dd>` : ''}
-      </dl></div></div>
-      <div class="card"><div class="card-b"><dl class="kv">
-        <dt>Fatura no</dt><dd>${e(f.no)}</dd><dt>Tarih</dt><dd>${tarih(f.tarih)}</dd><dt>Vade</dt><dd>${tarih(f.vade)}</dd>
-        ${f.aciklama ? `<dt>Açıklama</dt><dd>${e(f.aciklama)}</dd>` : ''}
-      </dl></div></div>
-    </div>
-    <div class="card" style="margin-top:16px">${tablo({
+    <div class="card"><div class="card-b"><dl class="kv">
+      <dt>Cari</dt><dd>${cariLink ? `<a href="#/cari/${f.cari_id}"><b>${e(f.unvan)}</b></a>` : `<b>${e(f.unvan)}</b>`}</dd>
+      <dt>Tarih</dt><dd>${tarih(f.tarih)}${fis ? '' : ` <span class="muted">· Vade ${tarih(f.vade)}</span>`}</dd>
+      ${odeme ? `<dt>Ödeme</dt><dd>${odeme}</dd>` : ''}
+      ${f.vergi_no || f.tc_no ? `<dt>Vergi D. / No</dt><dd>${e(f.vergi_dairesi || '')} ${e(f.vergi_no || f.tc_no)}</dd>` : ''}
+      ${f.adres ? `<dt>Adres</dt><dd>${e(f.adres)} ${e(f.ilce || '')} ${e(f.il || '')}</dd>` : ''}
+      ${f.aciklama ? `<dt>Açıklama</dt><dd>${e(f.aciklama)}</dd>` : ''}
+    </dl></div></div>
+    <div class="card" style="margin-top:16px">${tablo(fis ? {
+      // Fişte müşterinin ödediği fiyatlar (KDV dahil) gösterilir
       kolonlar: [
-        { key: 'aciklama', label: 'Açıklama', main: true, render: (v, s) => (s.urun_id ? `<a href="#/urun/${s.urun_id}">${e(v)}</a>` : e(v)) },
-        { key: 'miktar', label: 'Miktar', render: (v, s) => `${miktar(v)} ${e(s.birim || '')}` },
+        { key: 'aciklama', label: 'Ürün', main: true, render: (v, s) => (s.urun_id ? `<a href="#/urun/${s.urun_id}">${e(v)}</a>` : e(v)) },
+        { key: 'miktar', label: 'Miktar', render: (v, s) => `<b>${miktar(v)}</b> ${e(s.birim || '')}` },
+        { key: 'dahil_fiyat', label: 'Fiyat', type: 'money' },
+        { key: 'dahil_tutar', label: 'Tutar', type: 'money' },
+      ],
+      satirlar: f.kalemler.map((k) => ({ ...k, dahil_tutar: k.tutar + k.kdv_tutar, dahil_fiyat: Math.round((k.tutar + k.kdv_tutar) / k.miktar) })),
+    } : {
+      kolonlar: [
+        { key: 'aciklama', label: 'Ürün', main: true, render: (v, s) => (s.urun_id ? `<a href="#/urun/${s.urun_id}">${e(v)}</a>` : e(v)) },
+        { key: 'miktar', label: 'Miktar', render: (v, s) => `<b>${miktar(v)}</b> ${e(s.birim || '')}` },
         { key: 'birim_fiyat', label: 'Birim Fiyat', type: 'money' },
         { key: 'iskonto', label: 'İsk. %', render: (v) => (v ? '%' + v : '') },
         { key: 'kdv', label: 'KDV %', render: (v) => '%' + v },
@@ -78,22 +82,60 @@ export async function goster(ctx) {
       ${Object.entries(kdvGrup).map(([k, v]) => `<div><span>KDV %${k}</span><span class="num">${sayi(v)}</span></div>`).join('')}
       <div class="g"><span>Genel Toplam</span><span class="num">${tl(f.genel_toplam)}</span></div>
     </div></div></div>`;
-  ciktiDugmeleri($('#f-cikti'), {
-    pdf: `/api/faturalar/${f.id}/pdf`,
-    yazdir: () => (f.belge_tipi === 'fis' ? fisYazdir(f) : faturaYazdir(f)),
-    baslik: `${f.tur_ad} ${f.no}`,
-    metin: `Sayın ${f.unvan}, ${f.no} numaralı ${f.tur_ad.toLocaleLowerCase('tr-TR')} ektedir. Tutar: ${tl(f.genel_toplam)}.`,
-    telefon: f.telefon,
-  });
-  $('#diger')?.addEventListener('click', (ev) => menu('Diğer', [
-    ['Düzenle', 'edit', () => faturaAc({ id: f.id, onKaydet: () => ctx.yenile() })],
+}
+
+const cikti = (f) => ({
+  pdf: `/api/faturalar/${f.id}/pdf`,
+  yazdir: () => (f.belge_tipi === 'fis' ? fisYazdir(f) : faturaYazdir(f)),
+  baslik: `${f.tur_ad} ${f.no}`,
+  metin: `Sayın ${f.unvan}, ${f.no} numaralı ${f.tur_ad.toLocaleLowerCase('tr-TR')} ektedir. Tutar: ${tl(f.genel_toplam)}.`,
+  telefon: f.telefon,
+});
+
+function digerMenu(f, anchor, sonra) {
+  menu('Diğer', [
+    ['Düzenle', 'edit', () => faturaAc({ id: f.id, onKaydet: sonra })],
     ['İptal et', 'trash', async () => {
-      if (!await onayla('Fatura iptal edilsin mi?', { ok: 'İptal Et', tehlikeli: true })) return;
+      if (!await onayla(`${f.tur_ad} iptal edilsin mi?`, { ok: 'İptal Et', tehlikeli: true })) return;
       await del(`/faturalar/${f.id}`);
       toast('İptal edildi', 'ok');
-      ctx.yenile();
+      sonra?.();
     }, true],
-  ], ev.currentTarget));;
+  ], anchor);
+}
+
+export async function goster(ctx) {
+  const f = await get(`/faturalar/${ctx.params[0]}`);
+  if (!ctx.guncel()) return;
+  ctx.baslik(`${f.tur_ad} ${f.no}`, `#/faturalar?tur=${f.tur.startsWith('alis') ? 'alis' : 'satis'}`);
+  const tahsil = f.tur === 'satis' || f.tur === 'alis_iade';
+  ctx.el.innerHTML = `
+    <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
+      <span id="f-cikti"></span>
+      ${f.iptal || f.kaynak === 'netsis' ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
+      <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>`}
+    </div></div>
+    ${detayHtml(f)}`;
+  ciktiDugmeleri($('#f-cikti'), cikti(f));
+  $('#diger')?.addEventListener('click', (ev) => digerMenu(f, ev.currentTarget, () => ctx.yenile()));
+}
+
+/** Fişi / faturayı sayfadan ayrılmadan açılır pencerede gösterir. */
+export async function faturaPopup(id, { onDegis } = {}) {
+  const f = await get(`/faturalar/${id}`);
+  const duzenlenir = !f.iptal && f.kaynak !== 'netsis';
+  const m = modal({
+    title: `${f.tur_ad} · ${f.no}`,
+    wide: 'xl',
+    body: detayHtml(f, { cariLink: !location.hash.startsWith(`#/cari/${f.cari_id}`) }),
+    footer: `<span id="fp-cikti" style="margin-right:auto"></span>
+      ${duzenlenir ? `<button class="btn" id="fp-diger">${icon('dots')} Diğer</button>` : ''}`,
+  });
+  m.el.querySelector('.modal').classList.add('belge-modal');
+  ciktiDugmeleri($('#fp-cikti', m.el), { ...cikti(f), kucuk: true });
+  $('#fp-diger', m.el)?.addEventListener('click', (ev) => digerMenu(f, ev.currentTarget, () => { m.close(); onDegis?.(); }));
+  $$('a[href^="#/"]', m.el).forEach((a) => a.addEventListener('click', () => m.close()));
+  return m;
 }
 
 /** Faturayı sayfadan ayrılmadan açılır pencerede oluşturur / düzenler. */
@@ -187,7 +229,7 @@ export async function form(ctx) {
       <div><span class="lbl-m">Miktar</span><input data-f="miktar" inputmode="decimal" value="${k.miktar ?? 1}"><input type="hidden" data-f="birim" value="${e(k.birim || 'Adet')}"></div>
       <div><span class="lbl-m">Fiyat</span><input data-f="birim_fiyat" class="money" inputmode="decimal" placeholder="0,00" value="${k.birim_fiyat !== undefined ? sayi(k.birim_fiyat) : ''}"></div>
       <div><span class="lbl-m">İsk. %</span><input data-f="iskonto" inputmode="decimal" value="${k.iskonto ?? (cari?.iskonto || 0)}"></div>
-      <div><span class="lbl-m">KDV</span><select data-f="kdv">${KDV_ORANLARI.map((o) => `<option value="${o}" ${Number(k.kdv ?? 20) === o ? 'selected' : ''}>%${o}</option>`).join('')}</select></div>
+      <div><span class="lbl-m">KDV</span><select data-f="kdv">${KDV_ORANLARI.map((o) => `<option value="${o}" ${Number(k.kdv ?? varsayilanKdv()) === o ? 'selected' : ''}>%${o}</option>`).join('')}</select></div>
       <div class="tot" data-tot>0,00</div>
       <div><button class="btn ghost icon sm danger-text" data-rm title="Kalemi sil">${icon('trash')}</button></div>`;
     $('#lines').appendChild(d);
@@ -205,10 +247,10 @@ export async function form(ctx) {
       d.dataset.urun = u.id;
       inp.value = u.ad;
       $('[data-f=birim]', d).value = u.birim || 'Adet';
-      $('[data-f=kdv]', d).value = String(u.kdv ?? 20);
+      $('[data-f=kdv]', d).value = String(u.kdv ?? varsayilanKdv());
       const fiyat = alis() ? u.alis_fiyat : u.satis_fiyat;
       const kdvDahil = $('#kdvdahil').checked;
-      $('[data-f=birim_fiyat]', d).value = fiyat ? sayi(kdvDahil ? Math.round(fiyat * (1 + (u.kdv ?? 20) / 100)) : fiyat) : '';
+      $('[data-f=birim_fiyat]', d).value = fiyat ? sayi(kdvDahil ? Math.round(fiyat * (1 + (u.kdv ?? varsayilanKdv()) / 100)) : fiyat) : '';
       list.classList.add('hidden');
       hesapla();
       $('[data-f=miktar]', d).select();

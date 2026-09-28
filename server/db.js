@@ -38,6 +38,8 @@ function seedDefaults(d) {
   const set = d.prepare('INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES (?, ?)');
   set.run('firma_unvan', 'Firmam');
   set.run('fatura_seri', 'FTR');
+  set.run('kdv_orani', '20');
+  set.run('satis_kdv', 'sor');
 }
 
 function db() {

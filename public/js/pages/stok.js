@@ -1,4 +1,4 @@
-import { get, post, put, del } from '../api.js';
+import { get, post, put, del, varsayilanKdv } from '../api.js';
 import { e, $, icon, tl, miktar, bugun, toast, formModal, onayla, menu, tablo, tabloBagla, debounce, qs } from '../ui.js';
 import { BIRIMLER, KDV_ORANLARI } from '../sabitler.js';
 
@@ -20,7 +20,7 @@ export function urunFormu(u = null, { ad, onKaydet } = {}) {
       { name: 'notlar', label: 'Not', type: 'textarea', full: true, ek: true },
       ...(yeni ? [] : [{ name: 'aktif', label: 'Aktif', type: 'check', ek: true }]),
     ],
-    degerler: { birim: 'Adet', kdv: 20, kritik_stok: 0, ...(u || {}), ad: u?.ad || ad || '' },
+    degerler: { birim: 'Adet', kdv: varsayilanKdv(), kritik_stok: 0, ...(u || {}), ad: u?.ad || ad || '' },
     onSubmit: async (d) => {
       d.kritik_stok = d.kritik_stok || 0;
       if (yeni) {

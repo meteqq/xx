@@ -22,8 +22,9 @@ function varsayilanHesap(tip) {
 }
 
 /**
- * g: { cari_id?, tarih?, aciklama?, kalemler: [{ urun_id?, aciklama, miktar, birim_fiyat (KDV dahil), kdv, iskonto? }],
- *      odeme: nakit | kredi_karti | veresiye | parcali, nakit?, kart? (parçalı tutarlar), hesap_id? }
+ * g: { cari_id?, tarih?, aciklama?, kalemler: [{ urun_id?, aciklama, miktar, birim_fiyat, kdv, iskonto? }],
+ *      odeme: nakit | kredi_karti | veresiye | parcali, nakit?, kart? (parçalı tutarlar), hesap_id?,
+ *      kdv_dahil? (varsayılan true; false ise fiyatların üzerine KDV eklenir) }
  */
 function satisKaydet(g) {
   const odeme = secenek(g.odeme, ['nakit', 'kredi_karti', 'veresiye', 'parcali'], 'Ödeme şekli');
@@ -33,7 +34,7 @@ function satisKaydet(g) {
   return tx(() => {
     const cari = g.cari_id ? db().prepare('SELECT * FROM cariler WHERE id = ?').get(g.cari_id) : pesinMusteri();
     if (!cari) throw hata(404, 'Müşteri bulunamadı');
-    const kalemler = (Array.isArray(g.kalemler) ? g.kalemler : []).map((k) => ({ ...k, kdv_dahil: true }));
+    const kalemler = (Array.isArray(g.kalemler) ? g.kalemler : []).map((k) => ({ ...k, kdv_dahil: g.kdv_dahil !== false }));
     const faturaId = faturaKaydet({ tur: 'satis', belge_tipi: 'fis', cari_id: cari.id, tarih: t, vade: t, aciklama: g.aciklama, kalemler });
     const f = db().prepare('SELECT no, genel_toplam FROM faturalar WHERE id = ?').get(faturaId);
 

@@ -1,4 +1,4 @@
-import { get, post, yetkisiz } from './api.js';
+import { get, post, yetkisiz, ayarlar as ayarGetir } from './api.js';
 import { $, $$, e, icon, toast, debounce, temaUygula, menu } from './ui.js';
 import * as dashboard from './pages/dashboard.js';
 import * as cariler from './pages/cariler.js';
@@ -126,10 +126,19 @@ function kabuk() {
     sb.classList.add('open');
     const s = document.createElement('div');
     s.className = 'scrim';
-    s.addEventListener('click', menuKapat);
+    s.addEventListener('click', () => menuKapat());
     document.body.appendChild(s);
+    history.pushState({ ...(history.state || {}), cekmece: 1 }, '');
   };
-  const menuKapat = () => { sb.classList.remove('open'); $('.scrim')?.remove(); };
+  // Geri tuşu menüyü kapatır; elle kapatılınca menünün geçmiş kaydı geri alınır (başka sayfaya geçilmediyse)
+  const menuKapat = (geriTusu = false) => {
+    if (!sb.classList.contains('open')) return;
+    sb.classList.remove('open');
+    $('.scrim')?.remove();
+    if (!geriTusu) setTimeout(() => { if (history.state?.cekmece) history.back(); }, 0);
+  };
+  window.addEventListener('popstate', (ev) => { if (!ev.state?.cekmece) menuKapat(true); });
+  window.addEventListener('hashchange', () => menuKapat(true));
   $('#menu-btn').addEventListener('click', menuAc);
   $('#more-btn').addEventListener('click', menuAc);
   sb.addEventListener('click', (ev) => { if (ev.target.closest('a')) menuKapat(); });
@@ -256,7 +265,7 @@ async function baslat() {
     return;
   }
   if (!d.girisli) return girisEkrani(d.kurulu);
-  firmaAdi = (await get('/ayarlar').catch(() => ({}))).firma_unvan || '';
+  firmaAdi = (await ayarGetir().catch(() => ({}))).firma_unvan || '';
   kabuk();
   yonlendir();
 }

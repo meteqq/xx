@@ -103,6 +103,9 @@ function faturaGetir(id) {
   if (!f) throw hata(404, 'Fatura bulunamadı');
   f.kalemler = db().prepare('SELECT * FROM fatura_kalemleri WHERE fatura_id = ? ORDER BY id').all(id);
   f.tur_ad = f.belge_tipi === 'fis' ? 'Satış Fişi' : TURLER[f.tur].ad;
+  // Satışla birlikte alınan ödeme (peşin/kart/parçalı); kalan kısım veresiye
+  f.odemeler = f.tahsilat_islem_id ? db().prepare(`SELECT odeme_sekli, SUM(alacak) tutar FROM cari_hareketler
+    WHERE islem_id = ? AND cari_id = ? GROUP BY odeme_sekli ORDER BY MIN(id)`).all(f.tahsilat_islem_id, f.cari_id) : [];
   return f;
 }
 

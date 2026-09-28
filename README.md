@@ -39,7 +39,18 @@ Uygulama gibi kullanmak için:
 - **iPhone (Safari):** Paylaş → *Ana Ekrana Ekle*
 - **Android (Chrome):** ⋮ menü → *Ana ekrana ekle*
 
-Aynı ağdaki telefondan denemek için bilgisayarın yerel IP adresini kullanın (ör. `http://192.168.1.20:3000`).
+Aynı ağdaki telefondan açmak için sunucu açılırken yazdığı `Telefondan: http://192.168.x.x:3000` adresini kullanın.
+
+Telefonlar *ana ekrana ekleme* (tam ekran uygulama) ve *Gönder* paylaşım menüsünü yalnızca **HTTPS** adreslerde açar.
+Yerel ağda bunun için:
+
+```bash
+npm run https
+```
+
+Sunucu `https://192.168.x.x:3443` adresini de yazar. Telefonda ilk açılışta çıkan güvenlik uyarısında
+*Gelişmiş → Devam et* deyin (sertifika bu bilgisayarda üretilir, `data/https.json`), sonra ana ekrana ekleyin.
+İnternetten erişilen bir sunucuda alan adı + Let's Encrypt (aşağıda) kullanın.
 
 ## Sunucuya kurulum (internetten erişim)
 
@@ -76,6 +87,7 @@ Nginx arkasında çalışırken `TRUST_PROXY=1` ortam değişkenini verin (oturu
 |---|---|---|
 | `PORT` | `3000` | Sunucu portu |
 | `HOST` | `0.0.0.0` | Dinlenecek adres |
+| `HTTPS_PORT` | kapalı | Yerel ağ HTTPS portu (`npm run https` → `3443`) |
 | `DATA_DIR` | `./data` | Veritabanı klasörü |
 | `DB_FILE` | `$DATA_DIR/cari.db` | Veritabanı dosyası |
 | `TRUST_PROXY` | kapalı | Ters vekil (nginx) arkasında `1` yapın |

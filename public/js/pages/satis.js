@@ -1,9 +1,35 @@
-import { get, post } from '../api.js';
+import { get, post, varsayilanKdv, satisKdv } from '../api.js';
 import { e, $, $$, icon, tl, sayi, miktar, parseTL, parseNum, toast, modal, formModal, debounce, qs, bekle } from '../ui.js';
 import { cariSecici } from './cariler.js';
 import { fisYazdir } from '../yazdir.js';
 
-const dahilFiyat = (u) => Math.round((u.satis_fiyat || 0) * (1 + (u.kdv ?? 20) / 100));
+const satirNet = (s) => Math.round(s.miktar * s.fiyat);
+/** KDV hariç seçilirse fiyatların üzerine eklenecek KDV ile toplam (sunucudaki hesapla aynı yuvarlama) */
+const kdvliToplam = (sepet) => sepet.reduce((a, s) => a + satirNet(s) + Math.round(satirNet(s) * s.kdv / 100), 0);
+
+/** Fiyatlar KDV dahil mi? Ayara göre sorar; vazgeçilirse null. */
+function kdvSor(sepet) {
+  const ayar = satisKdv();
+  if (ayar !== 'sor') return Promise.resolve(ayar === 'dahil');
+  if (!sepet.some((s) => s.kdv > 0)) return Promise.resolve(true);
+  const dahil = sepet.reduce((a, s) => a + satirNet(s), 0);
+  const haric = kdvliToplam(sepet);
+  const oranlar = [...new Set(sepet.filter((s) => s.kdv > 0).map((s) => '%' + s.kdv))].join(', ');
+  return new Promise((coz) => {
+    let secim = null;
+    const m = modal({
+      title: 'KDV',
+      body: `<div class="kdv-sor">
+        <button class="btn primary lg" data-k="1" autofocus><span>KDV Dahil</span><b class="num">${tl(dahil)}</b></button>
+        <button class="btn lg" data-k="0"><span>KDV Hariç <small>+${e(oranlar)}</small></span><b class="num">${tl(haric)}</b></button>
+      </div>`,
+      onClose: () => coz(secim),
+    });
+    m.el.querySelector('.modal').classList.add('kdv-modal');
+    $$('[data-k]', m.el).forEach((b) => b.addEventListener('click', () => { secim = b.dataset.k === '1'; m.close(); }));
+    setTimeout(() => $('[data-k="1"]', m.el)?.focus(), 30);
+  });
+}
 
 /** Hızlı satış penceresi: ürün ekle, ödeme şekline bas, bitti. */
 export async function satisAc({ cariId, onKaydet } = {}) {
@@ -39,7 +65,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
   cariKutusu();
 
   // ---------- Sepet ----------
-  const toplam = () => sepet.reduce((a, s) => a + Math.round(s.miktar * s.fiyat), 0);
+  const toplam = () => sepet.reduce((a, s) => a + satirNet(s), 0);
   function ciz() {
     const kap = $m('#s-sepet');
     if (!sepet.length) {
@@ -49,7 +75,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
         <div class="sp-ad"><b>${e(s.ad)}</b><span class="muted small">${sayi(s.fiyat)} / ${e(s.birim)}</span></div>
         <div class="stepper"><button type="button" data-a="-" aria-label="Azalt">${icon('minus')}</button><input data-a="m" inputmode="decimal" value="${miktar(s.miktar)}"><button type="button" data-a="+" aria-label="Artır">${icon('plus')}</button></div>
         <input class="money sp-fiyat" data-a="f" inputmode="decimal" value="${sayi(s.fiyat)}" aria-label="Fiyat">
-        <div class="sp-tutar num">${sayi(Math.round(s.miktar * s.fiyat))}</div>
+        <div class="sp-tutar num">${sayi(satirNet(s))}</div>
         <button type="button" class="btn ghost icon sm danger-text" data-a="x" aria-label="Sil">${icon('trash')}</button>
       </div>`).join('');
     }
@@ -82,7 +108,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
     sonucKutu.classList.add('hidden');
     ara.focus();
   }
-  const urunden = (u) => ({ urun_id: u.id, ad: u.ad, birim: u.birim, kdv: u.kdv, fiyat: dahilFiyat(u) });
+  const urunden = (u) => ({ urun_id: u.id, ad: u.ad, birim: u.birim, kdv: u.kdv ?? varsayilanKdv(), fiyat: u.satis_fiyat || 0 });
 
   // ---------- Ürün arama / barkod ----------
   let sonuclar = [];
@@ -92,7 +118,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
     const no = ++sira;
     sonuclar = q ? (await get('/urunler?' + qs({ q }))).slice(0, 12) : [];
     if (no !== sira) return null;
-    sonucKutu.innerHTML = sonuclar.map((u, i) => `<div class="ac-item" data-i="${i}"><div><div>${e(u.ad)}</div><div class="s">${e(u.kod || '')} · Stok ${miktar(u.miktar)}</div></div><div class="num"><b>${sayi(dahilFiyat(u))}</b></div></div>`).join('')
+    sonucKutu.innerHTML = sonuclar.map((u, i) => `<div class="ac-item" data-i="${i}"><div><div>${e(u.ad)}</div><div class="s">${e(u.kod || '')} · Stok ${miktar(u.miktar)}</div></div><div class="num"><b>${sayi(u.satis_fiyat || 0)}</b></div></div>`).join('')
       + (q ? `<div class="ac-item" data-serbest><div>${icon('plus')} "${e(q)}" ekle</div></div>` : '');
     sonucKutu.classList.toggle('hidden', !q);
     return q;
@@ -111,15 +137,13 @@ export async function satisAc({ cariId, onKaydet } = {}) {
     ev.preventDefault();
     const it = ev.target.closest('.ac-item');
     if (!it) return;
-    if (it.hasAttribute('data-serbest')) ekle({ urun_id: null, ad: ara.value.trim(), birim: 'Adet', kdv: 20, fiyat: 0 });
+    if (it.hasAttribute('data-serbest')) ekle({ urun_id: null, ad: ara.value.trim(), birim: 'Adet', kdv: varsayilanKdv(), fiyat: 0 });
     else ekle(urunden(sonuclar[Number(it.dataset.i)]));
   });
   ara.addEventListener('blur', () => setTimeout(() => sonucKutu.classList.add('hidden'), 150));
 
   // ---------- Ödeme ----------
   async function kaydet(odeme, ek = {}, dugme) {
-    if (!sepet.length) { toast('Sepete ürün ekleyin', 'err'); ara.focus(); return; }
-    if (odeme === 'veresiye' && !cari) { toast('Veresiye için müşteri seçin', 'err'); $m('#s-cari input')?.focus(); return; }
     const dugmeler = $$('[data-o]', m.el);
     dugmeler.forEach((b) => { b.disabled = true; });
     const bitti = bekle(dugme || $(`[data-o="${odeme}"]`, m.el));
@@ -142,10 +166,14 @@ export async function satisAc({ cariId, onKaydet } = {}) {
       dugmeler.forEach((b) => { b.disabled = false; });
     }
   }
-  $$('[data-o]', m.el).forEach((b) => b.addEventListener('click', () => {
-    if (b.dataset.o !== 'parcali') return kaydet(b.dataset.o);
-    if (!sepet.length) return toast('Sepete ürün ekleyin', 'err');
-    const tt = toplam();
+  $$('[data-o]', m.el).forEach((b) => b.addEventListener('click', async () => {
+    const odeme = b.dataset.o;
+    if (!sepet.length) { toast('Sepete ürün ekleyin', 'err'); ara.focus(); return; }
+    if (odeme === 'veresiye' && !cari) { toast('Veresiye için müşteri seçin', 'err'); $m('#s-cari input')?.focus(); return; }
+    const kdvDahil = await kdvSor(sepet);
+    if (kdvDahil === null) return;
+    if (odeme !== 'parcali') return kaydet(odeme, { kdv_dahil: kdvDahil });
+    const tt = kdvDahil ? toplam() : kdvliToplam(sepet);
     formModal({
       title: `Parçalı Ödeme · ${tl(tt)}`,
       kaydet: 'Satışı Tamamla',
@@ -161,7 +189,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
         };
         form.addEventListener('input', guncelle);
       },
-      onSubmit: async (d) => kaydet('parcali', { nakit: d.nakit || 0, kart: d.kart || 0 }),
+      onSubmit: async (d) => kaydet('parcali', { kdv_dahil: kdvDahil, nakit: d.nakit || 0, kart: d.kart || 0 }),
     });
   }));
 

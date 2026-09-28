@@ -201,18 +201,6 @@ function ekstrePdf(r) {
   });
 }
 
-function imzaAlani(doc, sol, sag) {
-  if (doc.y + 70 > doc.page.height - 50) doc.addPage();
-  const y = doc.y + 40;
-  const w = (doc.page.width - 72 - 60) / 2;
-  for (const [i, t] of [sol, sag].entries()) {
-    const x = 36 + i * (w + 60);
-    doc.moveTo(x, y).lineTo(x + w, y).lineWidth(0.8).strokeColor(RENK.koyu).stroke();
-    doc.font('n').fontSize(8).fillColor(RENK.gri).text(`${t || ''}\nKaşe / İmza`, x, y + 4, { width: w, align: 'center' });
-  }
-  doc.x = 36;
-}
-
 function faturaPdf(f) {
   const a = ayarlar();
   return uret((doc) => {
@@ -272,7 +260,6 @@ function makbuzPdf(i) {
       doc.moveDown(0.8).font('n').fontSize(9).fillColor(RENK.koyu)
         .text(`Güncel bakiye: ${para(Math.abs(i.bakiye))} TL ${i.bakiye > 0 ? 'Borçlu' : i.bakiye < 0 ? 'Alacaklı' : ''}`, 36);
     }
-    imzaAlani(doc, 'Teslim eden', 'Teslim alan');
   });
 }
 

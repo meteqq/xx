@@ -28,7 +28,13 @@ function createApp() {
   app.use('/api', require('./routes/genel'));
   app.use('/api', (req, res) => res.status(404).json({ hata: 'Bulunamadı' }));
 
-  app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html', maxAge: 0 }));
+  // Güncellemeden sonra telefonlarda eski JS/CSS kalmasın: her açılışta sunucuya sorulur (değişmediyse 304)
+  app.use(express.static(path.join(__dirname, '..', 'public'), {
+    index: 'index.html',
+    setHeaders: (res, file) => {
+      res.setHeader('Cache-Control', /\.(woff2?|png|svg)$/.test(file) ? 'public, max-age=604800' : 'no-cache');
+    },
+  }));
   app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
   // eslint-disable-next-line no-unused-vars
@@ -44,9 +50,23 @@ function createApp() {
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
-  createApp().listen(port, host, () => {
+  const app = createApp();
+  app.listen(port, host, () => {
     console.log(`Cari Takip çalışıyor: http://localhost:${port}`);
+    for (const ip of yerelAdresler()) console.log(`Telefondan: http://${ip}:${port}`);
   });
+  const httpsPort = Number(process.env.HTTPS_PORT) || (process.argv.includes('--https') ? 3443 : 0);
+  if (httpsPort) {
+    const { sertifika } = require('./sertifika');
+    require('https').createServer(sertifika(yerelAdresler()), app).listen(httpsPort, host, () => {
+      for (const ip of ['localhost', ...yerelAdresler()]) console.log(`HTTPS: https://${ip}:${httpsPort}`);
+    });
+  }
+}
+
+function yerelAdresler() {
+  return Object.values(require('os').networkInterfaces()).flat()
+    .filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address);
 }
 
 module.exports = { createApp };

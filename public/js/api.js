@@ -41,3 +41,7 @@ export async function ayarlar(yenile = false) {
   if (!ayarCache || yenile) ayarCache = await get('/ayarlar');
   return ayarCache;
 }
+/** Ayarlardaki varsayılan KDV oranı (ayarlar yüklenmediyse %20) */
+export const varsayilanKdv = () => Number(ayarCache?.kdv_orani ?? 20);
+/** Satışta KDV: 'sor' | 'dahil' | 'haric' */
+export const satisKdv = () => ayarCache?.satis_kdv || 'sor';

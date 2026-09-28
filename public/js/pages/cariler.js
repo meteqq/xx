@@ -1,7 +1,8 @@
 import { get, post, put, del } from '../api.js';
-import { e, $, $$, icon, tl, tarih, bakiye, toast, formModal, onayla, menu, tablo, tabloBagla, autocomplete, debounce, qs, bugun } from '../ui.js';
+import { e, $, $$, icon, tl, tarih, miktar, bakiye, toast, modal, formModal, onayla, menu, tablo, tabloBagla, autocomplete, debounce, qs, bugun } from '../ui.js';
 import { CARI_TIP, DOVIZ, CEK_DURUM } from '../sabitler.js';
-import { ekstreYazdir } from '../yazdir.js';
+import { ekstreYazdir, raporYazdir } from '../yazdir.js';
+import { faturaPopup } from './fatura.js';
 import { ciktiDugmeleri, gonder } from '../cikti.js';
 
 // ---------- Cari formu (başka sayfalardan da kullanılır) ----------
@@ -117,6 +118,7 @@ export async function detay(ctx) {
   const id = ctx.params[0];
   const c = await get(`/cariler/${id}`);
   if (!ctx.guncel()) return;
+  yenile = ctx.yenile;
   ctx.baslik(c.unvan, `#/cariler?tip=${c.tip === 'tedarikci' ? 'tedarikci' : 'musteri'}`);
   const tel = (c.telefon || '').replace(/\D/g, '');
   const wa = tel ? (tel.startsWith('90') ? tel : tel.startsWith('0') ? '9' + tel : '90' + tel) : '';
@@ -139,22 +141,23 @@ export async function detay(ctx) {
           <div class="small ${c.bakiye > 0 ? 'neg' : 'pos'}" style="font-weight:600">${c.bakiye > 0 ? 'Borçlu' : c.bakiye < 0 ? 'Alacaklı' : ''}${riskAsim ? ' · Risk limiti aşıldı' : ''}</div>
         </div>
       </div>
-      <div class="btn-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px">
-        <button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')} Tahsilat Ekle</button>
-        <button class="btn" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')} Ödeme Ekle</button>
-        <button class="btn" data-aksiyon="fatura-${c.tip === 'tedarikci' ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')} Fatura</button>
-        <button class="btn purple" id="ekstre-gonder">${icon('share')} Ekstre Gönder</button>
-        <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>
+      <div class="btn-row aksiyonlar">
+        <button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')}<span>Tahsilat<span class="m-gizle"> Ekle</span></span></button>
+        <button class="btn" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')}<span>Ödeme<span class="m-gizle"> Ekle</span></span></button>
+        <button class="btn" data-aksiyon="fatura-${c.tip === 'tedarikci' ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')}<span>Fatura</span></button>
+        <button class="btn purple" id="ekstre-gonder">${icon('share')}<span><span class="m-gizle">Ekstre </span>Gönder</span></button>
+        <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}<span class="m-goster">Diğer</span></button>
       </div>
     </div></div>
 
     <div class="card" style="margin-top:16px"><div class="card-b">
-      <div class="tabs"><a href="#" data-tab="hareket" class="on">Hareketler</a><a href="#" data-tab="fatura">Faturalar</a><a href="#" data-tab="cek">Çek / Senet</a><a href="#" data-tab="bilgi">Bilgiler</a></div>
+      <div class="tabs"><a href="#" data-tab="hareket" class="on">Hareketler</a><a href="#" data-tab="urun">${c.tip === 'tedarikci' ? 'Alınan Ürünler' : 'Ürünler'}</a><a href="#" data-tab="fatura">Faturalar</a><a href="#" data-tab="cek">Çek / Senet</a><a href="#" data-tab="bilgi">Bilgiler</a></div>
       <div id="tab"></div>
     </div></div>`;
 
   const tabs = {
     hareket: () => hareketTab(c),
+    urun: () => urunTab(c),
     fatura: () => faturaTab(c),
     cek: () => cekTab(c),
     bilgi: () => bilgiTab(c),
@@ -227,9 +230,69 @@ async function hareketTab(c) {
     satirlar,
   }, { onRow: true, bos: 'Hareket yok' });
   tabloBagla($('#ekstre'), satirlar, (s) => {
-    if (s.fatura_id) location.hash = `#/fatura/${s.fatura_id}`;
+    if (s.fatura_id) faturaPopup(s.fatura_id, { onDegis: yenile });
     else if (s.islem_id) location.hash = `#/islem/${s.islem_id}`;
   });
+}
+
+let yenile = () => {};
+
+const DONEM = [['tumu', 'Tümü'], ['yil', 'Bu yıl'], ['ay', 'Bu ay']];
+function donemAralik(d) {
+  const t = bugun();
+  if (d === 'ay') return { bas: t.slice(0, 8) + '01' };
+  if (d === 'yil') return { bas: t.slice(0, 5) + '01-01' };
+  return {};
+}
+
+/** Müşteriye verilen (tedarikçiden alınan) ürünler: ürün bazında toplam adet ve tutar */
+async function urunTab(c, donem = 'tumu') {
+  const tab = $('#tab');
+  const p = { cari_id: c.id, ...donemAralik(donem) };
+  tab.innerHTML = `<div class="toolbar" style="margin-bottom:12px">
+      <div class="seg">${DONEM.map(([k, l]) => `<button data-d="${k}" class="${k === donem ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <span id="urun-cikti" style="margin-left:auto"></span></div>
+    <div id="urunler"><div class="spin"></div></div>`;
+  $$('[data-d]', tab).forEach((b) => b.addEventListener('click', () => urunTab(c, b.dataset.d)));
+  const r = await get('/rapor/urun?' + qs(p));
+  if (!document.body.contains(tab)) return;
+  ciktiDugmeleri($('#urun-cikti'), {
+    pdf: `/api/rapor/urun/pdf?${qs(p)}`, excel: `/api/rapor/urun/excel?${qs(p)}`, yazdir: () => raporYazdir(r),
+    baslik: r.baslik, metin: `Sayın ${c.unvan}, ürün dökümünüz ektedir.`, telefon: c.telefon, eposta: c.eposta, kucuk: true,
+  });
+  $('#urunler').innerHTML = tablo({
+    kolonlar: [
+      { key: 'ad', label: 'Ürün', main: true },
+      { key: 'miktar', label: 'Miktar', render: (v, s) => `<b class="num">${miktar(v)}</b> ${e(s.birim || '')}` },
+      { key: 'adet', label: 'Kez', render: (v) => `${v}` },
+      { key: 'son_tarih', label: 'Son', type: 'date' },
+      { key: 'toplam', label: 'Tutar', type: 'money' },
+    ],
+    satirlar: r.satirlar,
+    toplam: r.toplam,
+  }, { onRow: true, bos: 'Ürün yok' });
+  tabloBagla($('#urunler'), r.satirlar, (s) => urunGecmisi(c, s, p));
+}
+
+/** Bir ürünün bu cariyle olan satır satır geçmişi */
+async function urunGecmisi(c, u, p) {
+  const rows = await get(`/cariler/${c.id}/urun-hareket?` + qs({ urun_id: u.urun_id || '', ad: u.urun_id ? '' : u.ad, bas: p.bas || '' }));
+  const m = modal({
+    title: u.ad,
+    body: `<div class="urun-ozet"><div><span class="muted small">Toplam</span><b class="num">${miktar(u.miktar)} ${e(u.birim || '')}</b></div>
+        <div><span class="muted small">Tutar</span><b class="num">${tl(u.toplam)}</b></div></div>
+      <div id="ug-liste">${tablo({
+        kolonlar: [
+          { key: 'tarih', label: 'Tarih', type: 'date' },
+          { key: 'no', label: 'Belge', main: true, render: (v, s) => `${e(v)} <span class="badge ${s.tur.endsWith('iade') ? 'orange' : s.belge_tipi === 'fis' ? 'green' : 'blue'}">${s.tur.endsWith('iade') ? 'İade' : s.belge_tipi === 'fis' ? 'Fiş' : 'Fatura'}</span>` },
+          { key: 'miktar', label: 'Miktar', render: (v, s) => `<b class="num">${miktar(v)}</b> ${e(s.birim || '')}` },
+          { key: 'birim_fiyat', label: 'Birim Fiyat', type: 'money' },
+          { key: 'toplam', label: 'Tutar', type: 'money' },
+        ],
+        satirlar: rows,
+      }, { onRow: true, bos: 'Kayıt yok' })}</div>`,
+  });
+  tabloBagla($('#ug-liste', m.el), rows, (s) => faturaPopup(s.fatura_id, { onDegis: () => { m.close(); yenile(); } }));
 }
 
 async function faturaTab(c) {
@@ -241,7 +304,7 @@ async function faturaTab(c) {
     ],
     satirlar: rows,
   }, { onRow: true, bos: 'Kayıt yok' });
-  tabloBagla($('#tab'), rows, (s) => { location.hash = `#/fatura/${s.id}`; });
+  tabloBagla($('#tab'), rows, (s) => faturaPopup(s.id, { onDegis: yenile }));
 }
 
 async function cekTab(c) {

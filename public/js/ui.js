@@ -129,6 +129,26 @@ export function bekle(btn) {
 }
 
 // ---------- Modal ----------
+let modalSira = 0;
+let geriBekleniyor = false; // pencere kapatılınca yapılan history.back() henüz tamamlanmadı
+let bekleyenler = [];
+window.addEventListener('popstate', (ev) => {
+  if (geriBekleniyor) {
+    geriBekleniyor = false;
+    bekleyenler.splice(0).forEach((fn) => fn());
+    return;
+  }
+  const durum = ev.state?.modal || 0;
+  const acik = [...document.querySelectorAll('#modal-root > .modal-bg')].filter((m) => Number(m.dataset.m) > durum);
+  acik.reverse().forEach((m) => m._close?.(true));
+  // Artık açık olmayan pencerelere ait kayıtlar atlanır
+  if (durum && !document.querySelector(`#modal-root > .modal-bg[data-m="${durum}"]`)) {
+    if (acik.length) geriBekleniyor = true;
+    history.back();
+  }
+});
+const gecmiseEkle = (fn) => (geriBekleniyor ? bekleyenler.push(fn) : fn());
+
 export function modal({ title, body = '', footer = '', wide = false, onClose } = {}) {
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
@@ -137,16 +157,28 @@ export function modal({ title, body = '', footer = '', wide = false, onClose } =
     <div class="modal-b">${body}</div>
     ${footer ? `<div class="modal-f">${footer}</div>` : ''}
   </div>`;
-  const close = () => {
+  // Telefonun geri tuşu pencereyi kapatsın diye her pencere geçmişe bir kayıt ekler
+  const id = ++modalSira;
+  bg.dataset.m = id;
+  const close = (geriTusu = false) => {
+    if (!bg.isConnected) return;
     bg.remove();
+    // Kapatınca pencerenin geçmiş kaydı geri alınır; hemen ardından başka sayfaya geçildiyse dokunulmaz
+    if (!geriTusu) {
+      setTimeout(() => {
+        if (history.state?.modal === id && !geriBekleniyor) { geriBekleniyor = true; history.back(); }
+      }, 0);
+    }
     document.removeEventListener('keydown', esc);
     onClose?.();
   };
+  bg._close = close;
   const esc = (ev) => { if (ev.key === 'Escape' && $('#modal-root').lastElementChild === bg) close(); };
   bg.addEventListener('mousedown', (ev) => { if (ev.target === bg) close(); });
   bg.addEventListener('click', (ev) => { if (ev.target.closest('[data-close]')) close(); });
   document.addEventListener('keydown', esc);
   $('#modal-root').appendChild(bg);
+  gecmiseEkle(() => { if (bg.isConnected) history.pushState({ ...(history.state || {}), modal: id }, ''); });
   const first = bg.querySelector('.modal-b input:not([type=hidden]):not([readonly]), .modal-b select, .modal-b textarea');
   if (first && window.matchMedia('(min-width: 900px)').matches) setTimeout(() => first.focus(), 30);
   return { el: bg, body: $('.modal-b', bg), close };
@@ -314,9 +346,10 @@ export function tablo(r, { onRow, bos = 'Kayıt bulunamadı', ekKolon } = {}) {
   };
   const sag = (k) => ['money', 'bakiye', 'number'].includes(k.type);
   const td = (k, i, v, row) => {
-    const bos = v === null || v === undefined || v === '' || (k.type === 'money' && v === 0 && i !== amtIdx);
+    const html = hucre(k, v, row);
+    const bos = v === null || v === undefined || v === '' || html === '' || (k.type === 'money' && v === 0 && i !== amtIdx);
     const cls = [sag(k) ? 'r' : '', i === mainIdx ? 'main-col' : '', i === amtIdx ? 'amt-col' : '', bos ? 'empty-m' : ''].join(' ');
-    return `<td class="${cls}" data-l="${e(k.label)}">${hucre(k, v, row)}</td>`;
+    return `<td class="${cls}" data-l="${e(k.label)}">${html}</td>`;
   };
   if (!r.satirlar.length) return `<div class="empty">${icon('list')}<div>${e(bos)}</div></div>`;
   return `<div class="tbl-wrap"><table class="tbl cards">

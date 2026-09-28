@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const { db, replaceWith } = require('../db');
-const { hata, bugun, gunEkle, sec, dosyaAdi } = require('../util');
+const { hata, bugun, gunEkle, sec, secenek, dosyaAdi } = require('../util');
 const { odemeKaydet, islemIptal, SEKIL_AD } = require('../services/islem');
 const { satisKaydet } = require('../services/satis');
 const { rapor, CARI_TUR_AD, HESAP_TIP_AD } = require('../services/rapor');
@@ -200,7 +200,7 @@ r.get('/rapor/:ad/excel', async (req, res) => {
 
 // --- Ayarlar ---
 const AYAR_ALANLARI = ['firma_unvan', 'firma_adres', 'firma_telefon', 'firma_eposta', 'firma_vergi_dairesi',
-  'firma_vergi_no', 'firma_iban', 'fatura_seri', 'fatura_notu'];
+  'firma_vergi_no', 'firma_iban', 'fatura_seri', 'fatura_notu', 'kdv_orani', 'satis_kdv'];
 
 r.get('/ayarlar', (req, res) => {
   const rows = db().prepare(`SELECT anahtar, deger FROM ayarlar WHERE anahtar IN (${AYAR_ALANLARI.map(() => '?').join(',')})`).all(...AYAR_ALANLARI);
@@ -209,6 +209,12 @@ r.get('/ayarlar', (req, res) => {
 
 r.put('/ayarlar', (req, res) => {
   const v = sec(req.body || {}, AYAR_ALANLARI);
+  if (v.kdv_orani !== undefined) {
+    const k = Number(String(v.kdv_orani).replace(',', '.'));
+    if (!Number.isFinite(k) || k < 0 || k > 100) throw hata(400, 'KDV oranı 0 ile 100 arasında olmalı');
+    v.kdv_orani = String(k);
+  }
+  if (v.satis_kdv !== undefined) secenek(v.satis_kdv, ['sor', 'dahil', 'haric'], 'Satışta KDV');
   const st = db().prepare('INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES (?, ?)');
   db().transaction(() => { for (const [k, val] of Object.entries(v)) st.run(k, val); })();
   res.json({ ok: true });
