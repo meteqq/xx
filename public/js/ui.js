@@ -135,6 +135,17 @@ export function modal({ title, body = '', footer = '', wide = false, onClose } =
   return { el: bg, body: $('.modal-b', bg), close };
 }
 
+/** Basit seçenek menüsü: [[etiket, ikon, fn, tehlikeli?]] */
+export function menu(baslik, secenekler) {
+  const m = modal({
+    title: baslik,
+    body: `<ul class="list">${secenekler.map(([l, i, , t], n) => `<li class="click ${t ? 'neg' : ''}" data-n="${n}">${icon(i)}<div class="grow">${e(l)}</div></li>`).join('')}</ul>`,
+  });
+  m.body.style.padding = '0';
+  $$('[data-n]', m.el).forEach((li) => li.addEventListener('click', () => { m.close(); secenekler[Number(li.dataset.n)][2](); }));
+  return m;
+}
+
 export function onayla(mesaj, { baslik = 'Onay', ok = 'Evet', tehlikeli = false } = {}) {
   return new Promise((resolve) => {
     let sonuc = false;
@@ -155,10 +166,16 @@ export function onayla(mesaj, { baslik = 'Onay', ok = 'Evet', tehlikeli = false 
 export function formModal({ title, alanlar, degerler = {}, kaydet = 'Kaydet', wide = false, onSubmit, onMount }) {
   const m = modal({
     title, wide,
-    body: `<form class="form-grid" novalidate>${alanlar.map((a) => alanHtml(a, degerler)).join('')}<button type="submit" hidden></button></form>`,
+    body: `<form class="form-grid" novalidate>${alanlar.map((a) => alanHtml(a, degerler)).join('')}
+      ${alanlar.some((a) => a.ek) ? `<button type="button" class="btn ghost sm full" data-daha style="justify-self:start">${icon('plus')} Daha fazla</button>` : ''}
+      <button type="submit" hidden></button></form>`,
     footer: `<button class="btn" data-close>Vazgeç</button><button class="btn primary" data-save>${e(kaydet)}</button>`,
   });
   const form = $('form', m.el);
+  $('[data-daha]', form)?.addEventListener('click', (ev) => {
+    $$('.ek', form).forEach((x) => x.classList.remove('hidden'));
+    ev.currentTarget.remove();
+  });
   const gonder = async (ev) => {
     ev?.preventDefault();
     const data = formOku(form, alanlar);
@@ -187,10 +204,11 @@ export function formModal({ title, alanlar, degerler = {}, kaydet = 'Kaydet', wi
 }
 
 export function alanHtml(a, degerler = {}) {
-  if (a.type === 'section') return `<div class="form-sec">${e(a.label)}</div>`;
+  if (a.type === 'section') return '';
   const v = degerler[a.name] ?? a.value ?? '';
   const req = a.required ? 'class="req"' : '';
-  const cls = a.full ? 'f full' : 'f';
+  const ek = a.ek ? ' ek hidden' : '';
+  const cls = (a.full ? 'f full' : 'f') + ek;
   const ph = a.placeholder ? `placeholder="${e(a.placeholder)}"` : '';
   let input;
   switch (a.type) {
@@ -204,9 +222,9 @@ export function alanHtml(a, degerler = {}) {
       input = `<input name="${a.name}" class="money" inputmode="decimal" autocomplete="off" value="${v === '' ? '' : e(sayi(v))}" ${ph || 'placeholder="0,00"'}>`;
       break;
     case 'check':
-      return `<label class="check ${a.full ? 'full' : ''}"><input type="checkbox" name="${a.name}" ${v ? 'checked' : ''}> ${e(a.label)}</label>`;
+      return `<label class="check ${a.full ? 'full' : ''}${ek}"><input type="checkbox" name="${a.name}" ${v ? 'checked' : ''}> ${e(a.label)}</label>`;
     case 'html':
-      return `<div class="${a.full ? 'full' : ''}">${a.html}</div>`;
+      return `<div class="${a.full ? 'full' : ''}${ek}">${a.html}</div>`;
     default:
       input = `<input name="${a.name}" type="${a.type || 'text'}" value="${e(v)}" ${ph} ${a.type === 'number' ? 'inputmode="decimal" step="any"' : ''} ${a.attrs || ''}>`;
   }
@@ -258,7 +276,8 @@ export function tablo(r, { onRow, bos = 'Kayıt bulunamadı', ekKolon } = {}) {
   };
   const sag = (k) => ['money', 'bakiye', 'number'].includes(k.type);
   const td = (k, i, v, row) => {
-    const cls = [sag(k) ? 'r' : '', i === mainIdx ? 'main-col' : '', i === amtIdx ? 'amt-col' : '', v === null || v === undefined || v === '' ? 'empty-m' : ''].join(' ');
+    const bos = v === null || v === undefined || v === '' || (k.type === 'money' && v === 0 && i !== amtIdx);
+    const cls = [sag(k) ? 'r' : '', i === mainIdx ? 'main-col' : '', i === amtIdx ? 'amt-col' : '', bos ? 'empty-m' : ''].join(' ');
     return `<td class="${cls}" data-l="${e(k.label)}">${hucre(k, v, row)}</td>`;
   };
   if (!r.satirlar.length) return `<div class="empty">${icon('list')}<div>${e(bos)}</div></div>`;
@@ -303,7 +322,7 @@ export function autocomplete(kap, { ara, placeholder = 'Ara...', secili = null, 
     let aktif = 0;
     const goster = () => {
       const html = items.map((it, i) => `<div class="ac-item ${i === aktif ? 'on' : ''}" data-i="${i}"><div><div>${e(it.baslik)}</div>${it.alt ? `<div class="s">${e(it.alt)}</div>` : ''}</div>${it.sag ? `<div class="s">${it.sag}</div>` : ''}</div>`).join('');
-      const yeniHtml = yeni && inp.value.trim() ? `<div class="ac-item" data-yeni><div>${icon('plus')} "<b>${e(inp.value.trim())}</b>" yeni kayıt olarak ekle</div></div>` : '';
+      const yeniHtml = yeni && inp.value.trim() ? `<div class="ac-item" data-yeni><div>${icon('plus')} "<b>${e(inp.value.trim())}</b>" ekle</div></div>` : '';
       list.innerHTML = html + yeniHtml || '<div class="ac-item s">Sonuç yok</div>';
       list.classList.toggle('hidden', !html && !yeniHtml && !inp.value);
     };
@@ -356,3 +375,18 @@ export function indir(url) {
 }
 
 export const qs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+
+// ---------- Tema ----------
+export function temaUygula() {
+  let t = null;
+  try { t = localStorage.getItem('tema'); } catch { /* yok */ }
+  if (t) document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+}
+export function temaDegistir() {
+  const koyu = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === 'dark'
+    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  try { localStorage.setItem('tema', koyu ? 'light' : 'dark'); } catch { /* yok */ }
+  temaUygula();
+}

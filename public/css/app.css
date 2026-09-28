@@ -59,7 +59,7 @@ h3 { font-size: .95rem; }
 .small { font-size: .85rem; }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }
-.hidden { display: none !important; }
+.hidden, .tip-gizli { display: none !important; }
 .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pos { color: var(--green); }
 .neg { color: var(--red); }
@@ -284,7 +284,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
   .btn-row .btn.ghost.icon, .btn-row > .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
-.quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .quick a { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
 .quick a:hover { border-color: var(--primary); text-decoration: none; }
 .quick a .ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; }
@@ -338,7 +338,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(40px); opacity: .5; } }
 
-.sheet-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.sheet-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .sheet-actions a { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: var(--radius); background: var(--surface-2); color: var(--text); font-weight: 600; font-size: .85rem; text-align: center; }
 .sheet-actions a:hover { text-decoration: none; background: var(--primary-soft); }
 .sheet-actions .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; }
@@ -359,7 +359,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
 @keyframes sp { to { transform: rotate(360deg); } }
 
 /* Fatura kalemleri */
-.lines .line { display: grid; grid-template-columns: minmax(180px, 3fr) 90px 92px 120px 70px 84px 120px 40px; gap: 8px; align-items: end; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+.lines .line { display: grid; grid-template-columns: minmax(180px, 3fr) 90px 130px 70px 84px 120px 40px; gap: 8px; align-items: end; padding: 10px 0; border-bottom: 1px dashed var(--border); }
 .lines .line .tot { text-align: right; font-weight: 700; padding: 10px 0; font-variant-numeric: tabular-nums; }
 .lines .head { font-size: .75rem; color: var(--muted); font-weight: 700; text-transform: uppercase; padding-bottom: 0; border: 0; }
 @media (max-width: 1000px) {

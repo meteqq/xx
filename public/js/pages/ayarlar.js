@@ -1,5 +1,5 @@
 import { get, put, post, api, ayarlar as ayarGetir } from '../api.js';
-import { e, $, icon, toast, onayla, formOku, alanHtml, indir } from '../ui.js';
+import { $, icon, toast, onayla, formOku, alanHtml, indir, temaDegistir } from '../ui.js';
 
 const FIRMA = [
   { name: 'firma_unvan', label: 'Firma ünvanı', full: true },
@@ -8,9 +8,9 @@ const FIRMA = [
   { name: 'firma_eposta', label: 'E-posta' },
   { name: 'firma_vergi_dairesi', label: 'Vergi dairesi' },
   { name: 'firma_vergi_no', label: 'Vergi no' },
-  { name: 'firma_iban', label: 'IBAN (fatura altında görünür)', full: true },
-  { name: 'fatura_seri', label: 'Satış faturası seri öneki', placeholder: 'FTR' },
-  { name: 'fatura_notu', label: 'Fatura alt notu', type: 'textarea', full: true, placeholder: 'Örn: Ödemelerinizi IBAN numaramıza yapabilirsiniz.' },
+  { name: 'firma_iban', label: 'IBAN', full: true },
+  { name: 'fatura_seri', label: 'Fatura seri öneki' },
+  { name: 'fatura_notu', label: 'Fatura alt notu', type: 'textarea', full: true },
 ];
 
 export async function sayfa(ctx) {
@@ -23,14 +23,12 @@ export async function sayfa(ctx) {
       <div class="card"><div class="card-h"><h3>Firma Bilgileri</h3></div><div class="card-b">
         <form id="firma" class="form-grid">${FIRMA.map((f) => alanHtml(f, a)).join('')}</form>
         <div style="margin-top:14px;text-align:right"><button class="btn primary" id="firma-kaydet">Kaydet</button></div>
-        <div class="small muted" style="margin-top:8px">Bu bilgiler fatura, makbuz ve ekstre çıktılarının başlığında kullanılır.</div>
       </div></div>
       <div>
         <div class="card"><div class="card-h"><h3>Yedekleme</h3></div><div class="card-b">
-          <p class="small muted" style="margin-top:0">Tüm verileriniz tek bir dosyada saklanır. Düzenli olarak yedek indirmenizi öneririz.</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn primary" id="yedek-al">${icon('download')} Yedek İndir</button>
-            <label class="btn">${icon('upload')} Yedekten Geri Yükle<input type="file" id="yedek-yukle" accept=".db,.sqlite" hidden></label>
+            <label class="btn">${icon('upload')} Yedek Yükle<input type="file" id="yedek-yukle" accept=".db,.sqlite" hidden></label>
           </div>
         </div></div>
         <div class="card"><div class="card-h"><h3>Şifre Değiştir</h3></div><div class="card-b">
@@ -41,10 +39,8 @@ export async function sayfa(ctx) {
           </form>
           <div style="margin-top:14px;text-align:right"><button class="btn" id="sifre-kaydet">Şifreyi Değiştir</button></div>
         </div></div>
-        <div class="card"><div class="card-h"><h3>Telefona Kurulum</h3></div><div class="card-b small">
-          <p style="margin-top:0">Programı telefonunuzda uygulama gibi kullanmak için:</p>
-          <ul style="padding-left:18px;margin:0"><li><b>iPhone (Safari):</b> Paylaş ${e('→')} "Ana Ekrana Ekle"</li>
-          <li><b>Android (Chrome):</b> Menü (⋮) ${e('→')} "Ana ekrana ekle" / "Uygulamayı yükle"</li></ul>
+        <div class="card"><div class="card-h"><h3>Görünüm</h3></div><div class="card-b">
+          <button class="btn" id="tema">${icon('moon')} Koyu / Açık</button>
         </div></div>
       </div>
     </div>`;
@@ -58,11 +54,12 @@ export async function sayfa(ctx) {
     toast('Firma bilgileri kaydedildi', 'ok');
   });
   $('#yedek-al').addEventListener('click', () => indir('/api/yedek'));
+  $('#tema').addEventListener('click', temaDegistir);
   $('#yedek-yukle').addEventListener('change', async (ev) => {
     const file = ev.target.files[0];
     ev.target.value = '';
     if (!file) return;
-    if (!await onayla('Mevcut TÜM verileriniz seçilen yedekteki verilerle değiştirilecek. Devam etmeden önce güncel bir yedek almanız önerilir. Emin misiniz?', { ok: 'Geri Yükle', tehlikeli: true })) return;
+    if (!await onayla('Mevcut veriler, yedekteki verilerle değiştirilecek.', { ok: 'Geri Yükle', tehlikeli: true })) return;
     const fd = new FormData();
     fd.append('dosya', file);
     try {

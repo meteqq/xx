@@ -1,10 +1,8 @@
 export const HIZLI = [
-  ['#/odeme?yon=tahsilat', 'in', 'Tahsilat Al', 'green'],
-  ['#/odeme?yon=odeme', 'out', 'Ödeme Yap', 'red'],
-  ['#/fatura/yeni?tur=satis', 'invoice', 'Satış Faturası', 'blue'],
-  ['#/fatura/yeni?tur=alis', 'invoice', 'Alış Faturası', 'orange'],
-  ['#/kasa?islem=gider', 'minus', 'Masraf Gir', 'red'],
-  ['#/cariler?yeni=1', 'user', 'Yeni Cari', 'blue'],
+  ['#/odeme?yon=tahsilat', 'in', 'Tahsilat', 'green'],
+  ['#/odeme?yon=odeme', 'out', 'Ödeme', 'red'],
+  ['#/fatura/yeni?tur=satis', 'invoice', 'Fatura', 'blue'],
+  ['#/kasa?islem=gider', 'minus', 'Masraf', 'orange'],
 ];
 
 const RENK = {

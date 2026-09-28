@@ -1,6 +1,6 @@
 import { get, post, put, del } from '../api.js';
-import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, ayBasi, parseTL, parseNum, miktar, toast, onayla, tablo, tabloBagla, debounce, qs } from '../ui.js';
-import { FATURA_TUR, BIRIMLER, KDV_ORANLARI } from '../sabitler.js';
+import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, tablo, tabloBagla, debounce, qs } from '../ui.js';
+import { FATURA_TUR, KDV_ORANLARI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { urunFormu } from './stok.js';
 import { faturaYazdir } from '../yazdir.js';
@@ -10,39 +10,25 @@ export async function liste(ctx) {
   const tur = ctx.query.tur || '';
   ctx.el.innerHTML = `
     <div class="page-h"><h1>Faturalar</h1><div class="actions">
-      <a class="btn" href="#/fatura/yeni?tur=alis">${icon('plus')} Alış Faturası</a>
-      <a class="btn primary" href="#/fatura/yeni?tur=satis">${icon('plus')} Satış Faturası</a></div></div>
-    <div class="tabs">${[['', 'Tümü'], ...Object.entries(FATURA_TUR)].map(([k, l]) => `<a href="#/faturalar?tur=${k}" class="${tur === k ? 'on' : ''}">${l.replace(' Faturası', '')}</a>`).join('')}</div>
-    <div class="toolbar">
-      <input class="grow" type="search" id="q" placeholder="Fatura no, cari, açıklama ara...">
-      <input type="date" id="bas" value="${ayBasi()}"><input type="date" id="bit">
-      <label class="check small"><input type="checkbox" id="iptal"> İptaller</label>
-    </div>
-    <div class="grid g3" id="ozet" style="margin-top:14px"></div>
+      <a class="btn primary" href="#/fatura/yeni?tur=satis">${icon('plus')} Yeni Fatura</a></div></div>
+    <div class="tabs">${[['', 'Tümü'], ['satis', 'Satış'], ['alis', 'Alış']].map(([k, l]) => `<a href="#/faturalar?tur=${k}" class="${tur === k ? 'on' : ''}">${l}</a>`).join('')}</div>
+    <div class="toolbar"><input class="grow" type="search" id="q" placeholder="Ara"></div>
     <div class="card" id="liste" style="margin-top:14px"><div class="spin"></div></div>`;
   const yukle = async () => {
-    const rows = await get('/faturalar?' + qs({ tur, q: $('#q').value, bas: $('#bas').value, bit: $('#bit').value, iptal: $('#iptal').checked ? 1 : '' }));
+    const rows = await get('/faturalar?' + qs({ tur, q: $('#q').value }));
     if (!ctx.guncel()) return;
-    const top = (k) => rows.reduce((a, r) => a + r[k], 0);
-    $('#ozet').innerHTML = `
-      <div class="card stat"><span class="lbl">Fatura Sayısı</span><span class="val">${rows.length}</span></div>
-      <div class="card stat"><span class="lbl">KDV Hariç</span><span class="val">${tl(top('ara_toplam') - top('iskonto'))}</span></div>
-      <div class="card stat"><span class="lbl">Genel Toplam</span><span class="val">${tl(top('genel_toplam'))}</span><span class="sub">KDV: ${tl(top('kdv_toplam'))}</span></div>`;
     $('#liste').innerHTML = tablo({
       kolonlar: [
         { key: 'tarih', label: 'Tarih', type: 'date' },
-        { key: 'no', label: 'No' },
         { key: 'unvan', label: 'Cari', main: true },
-        { key: 'tur_ad', label: 'Tür', render: (v, s) => `<span class="badge ${s.tur === 'satis' ? 'blue' : s.tur === 'alis' ? 'orange' : ''}">${e(v.replace(' Faturası', ''))}</span>` },
-        { key: 'vade', label: 'Vade', type: 'date' },
-        { key: 'genel_toplam', label: 'Toplam', type: 'money' },
+        { key: 'no', label: 'No', render: (v, s) => `${e(v)}${s.tur.endsWith('iade') ? ' <span class="badge">İade</span>' : ''}` },
+        { key: 'genel_toplam', label: 'Tutar', type: 'money' },
       ],
       satirlar: rows,
-    }, { onRow: true, bos: 'Bu aralıkta fatura yok' });
+    }, { onRow: true, bos: 'Kayıt yok' });
     tabloBagla($('#liste'), rows, (s) => { location.hash = `#/fatura/${s.id}`; });
   };
   $('#q').addEventListener('input', debounce(yukle));
-  ['bas', 'bit', 'iptal'].forEach((id) => $('#' + id).addEventListener('change', yukle));
   await yukle();
 }
 
@@ -54,12 +40,11 @@ export async function goster(ctx) {
   const kdvGrup = {};
   for (const k of f.kalemler) kdvGrup[k.kdv] = (kdvGrup[k.kdv] || 0) + k.kdv_tutar;
   ctx.el.innerHTML = `
-    ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">Bu fatura iptal edilmiş.</div>' : ''}
+    ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">İptal edildi</div>' : ''}
     <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
-      <button class="btn" id="yazdir">${icon('print')} Yazdır / PDF</button>
-      ${f.iptal ? '' : `<a class="btn ${tahsil ? 'green' : 'red'}" href="#/odeme?yon=${tahsil ? 'tahsilat' : 'odeme'}&cari=${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Al' : 'Ödeme Yap'}</a>
-      <a class="btn" href="#/fatura/${f.id}/duzenle">${icon('edit')} Düzenle</a>
-      <button class="btn ghost danger-text" id="iptal">${icon('trash')} İptal Et</button>`}
+      <button class="btn" id="yazdir">${icon('print')} Yazdır</button>
+      ${f.iptal ? '' : `<a class="btn ${tahsil ? 'green' : 'red'}" href="#/odeme?yon=${tahsil ? 'tahsilat' : 'odeme'}&cari=${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat' : 'Ödeme'}</a>
+      <button class="btn" id="diger">${icon('dots')} Diğer</button>`}
     </div></div>
     <div class="grid g2">
       <div class="card"><div class="card-b"><dl class="kv">
@@ -90,18 +75,23 @@ export async function goster(ctx) {
       <div class="g"><span>Genel Toplam</span><span class="num">${tl(f.genel_toplam)}</span></div>
     </div></div></div>`;
   $('#yazdir').addEventListener('click', () => faturaYazdir(f));
-  $('#iptal')?.addEventListener('click', async () => {
-    if (!await onayla('Fatura iptal edilecek; cari bakiye ve stok hareketleri geri alınacak. Emin misiniz?', { ok: 'İptal Et', tehlikeli: true })) return;
-    await del(`/faturalar/${f.id}`);
-    toast('Fatura iptal edildi', 'ok');
-    ctx.yenile();
-  });
+  $('#diger')?.addEventListener('click', () => menu('Diğer', [
+    ['Düzenle', 'edit', () => { location.hash = `#/fatura/${f.id}/duzenle`; }],
+    ['İptal et', 'trash', async () => {
+      if (!await onayla('Fatura iptal edilsin mi?', { ok: 'İptal Et', tehlikeli: true })) return;
+      await del(`/faturalar/${f.id}`);
+      toast('İptal edildi', 'ok');
+      ctx.yenile();
+    }, true],
+  ]));
 }
 
 export async function form(ctx) {
   const duzenle = ctx.params[0];
   const f = duzenle ? await get(`/faturalar/${duzenle}`) : null;
-  let tur = f?.tur || (FATURA_TUR[ctx.query.tur] ? ctx.query.tur : 'satis');
+  const ilkTur = f?.tur || (FATURA_TUR[ctx.query.tur] ? ctx.query.tur : 'satis');
+  let taban = ilkTur.startsWith('alis') ? 'alis' : 'satis';
+  let tur = ilkTur;
   const cariId = f?.cari_id || ctx.query.cari;
   let cari = cariId ? await get(`/cariler/${cariId}`) : null;
   const yeniNo = duzenle ? f.no : (await get(`/faturalar/yeni-no?tur=${tur}`)).no;
@@ -111,35 +101,44 @@ export async function form(ctx) {
   ctx.el.innerHTML = `
   <div class="card">
     <div class="card-b">
-      ${duzenle ? '' : `<div class="seg" id="tur" style="margin-bottom:16px">${Object.entries(FATURA_TUR).map(([k, l]) => `<button data-t="${k}">${l.replace(' Faturası', '')}</button>`).join('')}</div>`}
+      ${duzenle ? '' : `<div class="seg" id="tur" style="margin-bottom:16px"><button data-t="satis">Satış</button><button data-t="alis">Alış</button></div>`}
       <div class="form-grid">
-        <label class="f full"><span class="req">Cari</span><div id="cari"></div></label>
+        <label class="f full"><span>Cari</span><div id="cari"></div></label>
+      </div>
+      <div class="lines" id="lines" style="margin-top:12px">
+        <div class="line head"><div>Ürün</div><div>Miktar</div><div>Fiyat</div><div>İsk. %</div><div>KDV</div><div class="right">Tutar</div><div></div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn ghost sm" id="ekle">${icon('plus')} Satır ekle</button>
+        <button class="btn ghost sm" id="detay-ac">${icon('plus')} Daha fazla</button>
+      </div>
+      <div class="form-grid hidden" id="detay" style="margin-top:12px">
         <label class="f"><span>Fatura no</span><input id="no" value="${e(yeniNo)}"></label>
         <label class="f"><span>Tarih</span><input type="date" id="tarih" value="${f?.tarih || bugun()}"></label>
         <label class="f"><span>Vade</span><input type="date" id="vade" value="${f?.vade || ''}"></label>
-        <label class="f" style="justify-content:flex-end"><span class="check"><input type="checkbox" id="kdvdahil"> Fiyatlar KDV dahil</span></label>
-        <label class="f full"><span>Açıklama</span><input id="aciklama" value="${e(f?.aciklama || '')}" placeholder="İrsaliye no, sipariş no, not..."></label>
+        <label class="f full"><span>Açıklama</span><input id="aciklama" value="${e(f?.aciklama || '')}"></label>
+        <label class="check"><input type="checkbox" id="kdvdahil"> Fiyatlar KDV dahil</label>
+        ${duzenle ? '' : '<label class="check"><input type="checkbox" id="iade"> İade faturası</label>'}
       </div>
-      <div class="form-sec" style="margin-top:22px">Kalemler</div>
-      <div class="lines" id="lines">
-        <div class="line head"><div>Ürün / Hizmet</div><div>Miktar</div><div>Birim</div><div>Birim Fiyat</div><div>İsk. %</div><div>KDV %</div><div class="right">Tutar</div><div></div></div>
-      </div>
-      <button class="btn" id="ekle" style="margin-top:12px">${icon('plus')} Kalem Ekle</button>
       <div class="totals" id="totals" style="margin-top:16px"></div>
     </div>
     <div class="sticky-save">
-      <div style="flex:1" class="mobile-only"><div class="small muted">Genel Toplam</div><div id="gt-m" class="num" style="font-size:1.2rem;font-weight:800"></div></div>
+      <div style="flex:1" class="mobile-only"><div id="gt-m" class="num" style="font-size:1.2rem;font-weight:800"></div></div>
       <a class="btn desk-only-inline" href="${duzenle ? `#/fatura/${duzenle}` : '#/faturalar'}">Vazgeç</a>
       <button class="btn primary lg" id="kaydet">${icon('check')} Kaydet</button>
     </div>
   </div>`;
 
-  const turCiz = () => $$('#tur button').forEach((b) => b.classList.toggle('on', b.dataset.t === tur));
-  $$('#tur button').forEach((b) => b.addEventListener('click', async () => {
-    tur = b.dataset.t;
+  $('#detay-ac').addEventListener('click', (ev) => { $('#detay').classList.remove('hidden'); ev.currentTarget.remove(); });
+  const turCiz = () => $$('#tur button').forEach((b) => b.classList.toggle('on', b.dataset.t === taban));
+  const turDegisti = async () => {
+    tur = $('#iade')?.checked ? `${taban}_iade` : taban;
     turCiz();
     $('#no').value = (await get(`/faturalar/yeni-no?tur=${tur}`)).no;
-  }));
+  };
+  $$('#tur button').forEach((b) => b.addEventListener('click', () => { taban = b.dataset.t; turDegisti(); }));
+  $('#iade')?.addEventListener('change', turDegisti);
+  if (!duzenle && tur.endsWith('_iade')) $('#iade').checked = true;
   turCiz();
 
   const vadeAyarla = () => {
@@ -162,12 +161,11 @@ export async function form(ctx) {
     d.className = 'line';
     d.dataset.urun = k.urun_id || '';
     d.innerHTML = `
-      <div class="ac"><span class="lbl-m">Ürün / Hizmet</span><input data-f="aciklama" placeholder="Ürün ara veya açıklama yaz..." value="${e(k.aciklama || '')}" autocomplete="off"><div class="ac-list hidden"></div></div>
-      <div><span class="lbl-m">Miktar</span><input data-f="miktar" inputmode="decimal" value="${k.miktar ?? 1}"></div>
-      <div><span class="lbl-m">Birim</span><select data-f="birim">${BIRIMLER.map((b) => `<option ${b === (k.birim || 'Adet') ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
-      <div><span class="lbl-m">Birim fiyat</span><input data-f="birim_fiyat" class="money" inputmode="decimal" placeholder="0,00" value="${k.birim_fiyat !== undefined ? sayi(k.birim_fiyat) : ''}"></div>
+      <div class="ac"><span class="lbl-m">Ürün</span><input data-f="aciklama" value="${e(k.aciklama || '')}" autocomplete="off"><div class="ac-list hidden"></div></div>
+      <div><span class="lbl-m">Miktar</span><input data-f="miktar" inputmode="decimal" value="${k.miktar ?? 1}"><input type="hidden" data-f="birim" value="${e(k.birim || 'Adet')}"></div>
+      <div><span class="lbl-m">Fiyat</span><input data-f="birim_fiyat" class="money" inputmode="decimal" placeholder="0,00" value="${k.birim_fiyat !== undefined ? sayi(k.birim_fiyat) : ''}"></div>
       <div><span class="lbl-m">İsk. %</span><input data-f="iskonto" inputmode="decimal" value="${k.iskonto ?? (cari?.iskonto || 0)}"></div>
-      <div><span class="lbl-m">KDV %</span><select data-f="kdv">${KDV_ORANLARI.map((o) => `<option value="${o}" ${Number(k.kdv ?? 20) === o ? 'selected' : ''}>%${o}</option>`).join('')}</select></div>
+      <div><span class="lbl-m">KDV</span><select data-f="kdv">${KDV_ORANLARI.map((o) => `<option value="${o}" ${Number(k.kdv ?? 20) === o ? 'selected' : ''}>%${o}</option>`).join('')}</select></div>
       <div class="tot" data-tot>0,00</div>
       <div><button class="btn ghost icon sm danger-text" data-rm title="Kalemi sil">${icon('trash')}</button></div>`;
     $('#lines').appendChild(d);
@@ -178,7 +176,7 @@ export async function form(ctx) {
       const q = inp.value.trim();
       items = q ? (await get('/urunler?' + qs({ q }))).slice(0, 12) : [];
       list.innerHTML = items.map((u, i) => `<div class="ac-item" data-i="${i}"><div><div>${e(u.ad)}</div><div class="s">${e(u.kod || '')} · Stok: ${miktar(u.miktar)} ${e(u.birim)}</div></div><div class="s">${tl(alis() ? u.alis_fiyat : u.satis_fiyat)}</div></div>`).join('')
-        + (q ? `<div class="ac-item" data-yeni><div>${icon('plus')} "<b>${e(q)}</b>" yeni ürün olarak kaydet</div></div>` : '');
+        + (q ? `<div class="ac-item" data-yeni><div>${icon('plus')} "<b>${e(q)}</b>" ürün olarak kaydet</div></div>` : '');
       list.classList.toggle('hidden', !q);
     }, 200);
     const urunSec = (u) => {

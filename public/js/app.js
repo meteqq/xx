@@ -1,5 +1,5 @@
 import { get, post, yetkisiz } from './api.js';
-import { $, $$, e, icon, toast, modal, debounce } from './ui.js';
+import { $, $$, e, icon, toast, modal, debounce, temaUygula } from './ui.js';
 import * as dashboard from './pages/dashboard.js';
 import * as cariler from './pages/cariler.js';
 import * as odeme from './pages/odeme.js';
@@ -38,46 +38,28 @@ const NAV = [
   ['home', '#/', 'home', 'Ana Sayfa'],
   ['cariler', '#/cariler', 'users', 'Cariler'],
   ['odeme', '#/odeme?yon=tahsilat', 'in', 'Tahsilat / Ödeme'],
-  ['islemler', '#/islemler', 'list', 'İşlem Geçmişi'],
-  ['sep', 'Finans'],
+  ['faturalar', '#/faturalar', 'invoice', 'Faturalar'],
   ['kasa', '#/kasa', 'wallet', 'Kasa & Banka'],
   ['cekler', '#/cekler', 'cheque', 'Çek / Senet'],
-  ['sep', 'Ticari'],
-  ['faturalar', '#/faturalar', 'invoice', 'Faturalar'],
-  ['urunler', '#/urunler', 'box', 'Stok / Ürünler'],
-  ['sep', ''],
+  ['urunler', '#/urunler', 'box', 'Ürünler'],
+  ['islemler', '#/islemler', 'list', 'İşlemler'],
   ['raporlar', '#/raporlar', 'chart', 'Raporlar'],
   ['ayarlar', '#/ayarlar', 'settings', 'Ayarlar'],
 ];
 
 let firmaAdi = '';
 
-// ---------- Tema ----------
-function temaUygula() {
-  let t = null;
-  try { t = localStorage.getItem('tema'); } catch { /* yok */ }
-  if (t) document.documentElement.dataset.theme = t;
-  else delete document.documentElement.dataset.theme;
-}
-function temaDegistir() {
-  const koyu = document.documentElement.dataset.theme
-    ? document.documentElement.dataset.theme === 'dark'
-    : window.matchMedia('(prefers-color-scheme: dark)').matches;
-  try { localStorage.setItem('tema', koyu ? 'light' : 'dark'); } catch { /* yok */ }
-  temaUygula();
-}
 temaUygula();
 
 // ---------- Giriş ----------
 function girisEkrani(kurulu) {
   $('#app').innerHTML = `<div class="auth"><form class="card" id="auth-form">
     <div class="brand"><div class="logo">₺</div><div>Cari Takip</div></div>
-    ${kurulu ? '' : `<div class="alert blue" style="margin-bottom:14px">Hoş geldiniz! İlk kullanım için firma adınızı ve bir giriş şifresi belirleyin.</div>
-      <label class="f" style="margin-bottom:12px"><span>Firma adı</span><input name="firma_unvan" placeholder="Örn: Yılmaz Ticaret" autocomplete="organization"></label>`}
-    <label class="f" style="margin-bottom:12px"><span>${kurulu ? 'Şifre' : 'Yeni şifre (en az 6 karakter)'}</span>
+    ${kurulu ? '' : `<label class="f" style="margin-bottom:12px"><span>Firma adı</span><input name="firma_unvan" autocomplete="organization"></label>`}
+    <label class="f" style="margin-bottom:12px"><span>Şifre</span>
       <input name="sifre" type="password" autocomplete="${kurulu ? 'current-password' : 'new-password'}" required autofocus></label>
     ${kurulu ? '' : '<label class="f" style="margin-bottom:12px"><span>Şifre tekrar</span><input name="sifre2" type="password" autocomplete="new-password" required></label>'}
-    <button class="btn primary block lg" type="submit">${kurulu ? 'Giriş Yap' : 'Başla'}</button>
+    <button class="btn primary block lg" type="submit">Giriş</button>
   </form></div>`;
   $('#auth-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -105,11 +87,8 @@ function kabuk() {
   $('#app').innerHTML = `<div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="logo">₺</div><div>Cari Takip<small>${e(firmaAdi)}</small></div></div>
-      <nav class="nav">${NAV.map((n) => n[0] === 'sep'
-        ? `<div class="sep"></div>${n[1] ? `<div class="cap">${e(n[1])}</div>` : ''}`
-        : `<a href="${n[1]}" data-nav="${n[0]}">${icon(n[2])}<span>${e(n[3])}</span></a>`).join('')}
+      <nav class="nav">${NAV.map((n) => `<a href="${n[1]}" data-nav="${n[0]}">${icon(n[2])}<span>${e(n[3])}</span></a>`).join('')}
         <div class="sep"></div>
-        <a href="#" data-tema>${icon('moon')}<span>Koyu / Açık Tema</span></a>
         <a href="#" data-cikis>${icon('logout')}<span>Çıkış</span></a>
       </nav>
     </aside>
@@ -118,11 +97,8 @@ function kabuk() {
         <button class="btn ghost icon back" id="menu-btn" aria-label="Menü">${icon('menu')}</button>
         <a class="btn ghost icon hidden" id="geri-btn" aria-label="Geri">${icon('back')}</a>
         <div class="title" id="page-title"></div>
-        <div class="search-wrap" id="search-wrap">${icon('search')}<input type="search" id="global-search" placeholder="Cari, ürün, fatura, çek ara... (Ctrl+K)" autocomplete="off"><div class="search-results hidden" id="search-results"></div></div>
+        <div class="search-wrap" id="search-wrap">${icon('search')}<input type="search" id="global-search" placeholder="Ara" autocomplete="off"><div class="search-results hidden" id="search-results"></div></div>
         <button class="btn ghost icon mobile-only" id="search-btn" aria-label="Ara">${icon('search')}</button>
-        <a class="btn green desk-only" href="#/odeme?yon=tahsilat">${icon('in')} Tahsilat</a>
-        <a class="btn red desk-only" href="#/odeme?yon=odeme">${icon('out')} Ödeme</a>
-        <a class="btn primary desk-only" href="#/fatura/yeni?tur=satis">${icon('plus')} Fatura</a>
       </header>
       <main class="content" id="content"></main>
     </div>
@@ -147,7 +123,6 @@ function kabuk() {
   $('#menu-btn').addEventListener('click', menuAc);
   $('#more-btn').addEventListener('click', menuAc);
   sb.addEventListener('click', (ev) => { if (ev.target.closest('a')) menuKapat(); });
-  $('[data-tema]').addEventListener('click', (ev) => { ev.preventDefault(); temaDegistir(); });
   $('[data-cikis]').addEventListener('click', async (ev) => {
     ev.preventDefault();
     await post('/auth/cikis');

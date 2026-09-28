@@ -40,7 +40,7 @@ export async function liste(ctx) {
   ctx.el.innerHTML = `<div class="page-h"><h1>Raporlar</h1></div>
     <div class="grid g3">${Object.entries(RAPORLAR).map(([k, r]) => `<a class="card card-b" href="#/rapor/${k}" style="color:inherit;text-decoration:none;display:flex;gap:14px;align-items:flex-start">
       <span class="ico" style="width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary);flex:none">${icon(r.icon)}</span>
-      <div><h3>${e(r.ad)}</h3><div class="small muted" style="margin-top:4px">${e(r.aciklama)}</div></div></a>`).join('')}</div>`;
+      <h3 style="align-self:center">${e(r.ad)}</h3></a>`).join('')}</div>`;
 }
 
 export async function rapor(ctx) {
@@ -54,7 +54,7 @@ export async function rapor(ctx) {
 
   ctx.el.innerHTML = `
     <div class="page-h"><h1>${e(tanim.ad)}</h1><div class="actions">
-      <button class="btn" id="pr">${icon('print')} Yazdır / PDF</button>
+      <button class="btn" id="pr">${icon('print')} Yazdır</button>
       <button class="btn" id="xl">${icon('excel')} Excel</button></div></div>
     ${tanim.filtre.length ? `<div class="card"><div class="card-b"><div class="form-grid" id="filtre">${tanim.filtre.map((f) => {
       if (f.type === 'cari') return `<label class="f" style="grid-column:span 2"><span>${f.label}</span><div id="f-cari"></div></label>`;
@@ -77,7 +77,7 @@ export async function rapor(ctx) {
   let son = null;
   async function yukle() {
     if (tanim.filtre.some((f) => f.type === 'cari') && !cariId) {
-      $('#sonuc').innerHTML = '<div class="empty">Ekstre için bir cari seçin</div>';
+      $('#sonuc').innerHTML = '';
       son = null;
       return;
     }
@@ -90,8 +90,7 @@ export async function rapor(ctx) {
     }
     if (!ctx.guncel()) return;
     const kol = son.kolonlar.map((k) => (k.key === 'aciklama' ? { ...k, main: true } : k));
-    $('#sonuc').innerHTML = `<div class="card-h"><div><h3>${e(son.baslik)}</h3><div class="small muted">${e(son.alt || '')} · ${son.satirlar.length} kayıt</div></div></div>`
-      + tablo({ ...son, kolonlar: kol }, { onRow: true });
+    $('#sonuc').innerHTML = tablo({ ...son, kolonlar: kol }, { onRow: true, bos: 'Kayıt yok' });
     tabloBagla($('#sonuc'), son.satirlar, (s) => {
       if (ad === 'ekstre') { if (s.fatura_id) location.hash = `#/fatura/${s.fatura_id}`; else if (s.islem_id) location.hash = `#/islem/${s.islem_id}`; }
       else if (['bakiye', 'yaslandirma', 'fatura'].includes(ad)) location.hash = `#/cari/${s.id}`;
