@@ -17,11 +17,11 @@ r.get('/', (req, res) => {
   if (q) { kosul.push('(f.no LIKE @q OR c.unvan LIKE @q OR f.aciklama LIKE @q)'); par.q = `%${q}%`; }
   const rows = db().prepare(`SELECT f.*, c.unvan FROM faturalar f JOIN cariler c ON c.id = f.cari_id
     WHERE ${kosul.join(' AND ')} ORDER BY f.tarih DESC, f.id DESC LIMIT 500`).all(par)
-    .map((f) => ({ ...f, tur_ad: TURLER[f.tur].ad }));
+    .map((f) => ({ ...f, tur_ad: f.belge_tipi === 'fis' ? 'Satış Fişi' : TURLER[f.tur].ad }));
   res.json(rows);
 });
 
-r.get('/yeni-no', (req, res) => res.json({ no: sonrakiNo(req.query.tur || 'satis') }));
+r.get('/yeni-no', (req, res) => res.json({ no: sonrakiNo(req.query.tur || 'satis', req.query.belge_tipi) }));
 
 r.get('/:id', (req, res) => res.json(faturaGetir(req.params.id)));
 
@@ -32,8 +32,13 @@ r.put('/:id', (req, res) => res.json({ id: faturaKaydet(req.body || {}, Number(r
 r.delete('/:id', (req, res) => {
   const f = db().prepare('SELECT * FROM faturalar WHERE id = ?').get(req.params.id);
   if (!f || f.iptal) throw hata(404, 'Fatura bulunamadı');
-  if (f.islem_id) islemIptal(f.islem_id);
-  else db().prepare('UPDATE faturalar SET iptal = 1 WHERE id = ?').run(f.id);
+  if (f.kaynak === 'netsis') throw hata(400, 'Netsis\'ten aktarılan faturalar iptal edilemez');
+  db().transaction(() => {
+    // Satışla birlikte alınan tahsilat da geri alınır
+    if (f.tahsilat_islem_id && db().prepare('SELECT 1 FROM islemler WHERE id = ?').get(f.tahsilat_islem_id)) islemIptal(f.tahsilat_islem_id);
+    if (f.islem_id) islemIptal(f.islem_id);
+    else db().prepare('UPDATE faturalar SET iptal = 1 WHERE id = ?').run(f.id);
+  })();
   res.json({ ok: true });
 });
 

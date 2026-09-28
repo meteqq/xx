@@ -413,6 +413,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
   .pr .totals .g { font-size: 12pt; font-weight: bold; border-top: 1px solid #000; }
   .pr .note { margin-top: 12px; font-size: 9pt; }
   .pr tr { break-inside: avoid; }
+  .pr .fis { width: 72mm; font-size: 9.5pt; font-family: "DejaVu Sans Mono", monospace; }
+  .pr .fis hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
+  .pr .fis-baslik { text-align: center; margin-bottom: 6px; }
+  .pr .fis-s { display: flex; justify-content: space-between; gap: 8px; }
+  .pr .fis-top { font-size: 12pt; font-weight: bold; margin-top: 2px; }
+  .pr .fis-alt { text-align: center; margin-top: 8px; }
 }
 
 /* Açılır menü */
@@ -424,3 +430,95 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .toast { display: flex; align-items: center; gap: 14px; }
 .toast-btn { background: rgba(255, 255, 255, .18); border: 0; color: #fff; font: inherit; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
 .list li.neg { color: var(--red); }
+
+/* ---------- Canlı düğmeler ---------- */
+.btn {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  box-shadow: 0 1px 2px rgba(16, 32, 48, .08), inset 0 1px 0 rgba(255, 255, 255, .6);
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, filter .14s ease;
+}
+.btn:hover { transform: translateY(-1px); border-color: #b9c6d4; box-shadow: 0 4px 12px rgba(16, 32, 48, .12); background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%); }
+.btn:active { transform: translateY(0) scale(.97); box-shadow: inset 0 2px 5px rgba(16, 32, 48, .15); }
+.btn.primary { background: linear-gradient(180deg, #3b8cf0 0%, #1d6fd1 100%); border-color: #1964bf; box-shadow: 0 2px 6px rgba(29, 111, 209, .35), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.btn.primary:hover { box-shadow: 0 6px 18px rgba(29, 111, 209, .45); filter: brightness(1.04); }
+.btn.green { background: linear-gradient(180deg, #25b06b 0%, #148a4f 100%); border-color: #127a46; box-shadow: 0 2px 6px rgba(20, 138, 79, .35), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.btn.green:hover { box-shadow: 0 6px 18px rgba(20, 138, 79, .45); }
+.btn.red { background: linear-gradient(180deg, #ea5c4e 0%, #c0392b 100%); border-color: #ad3326; box-shadow: 0 2px 6px rgba(192, 57, 43, .35), inset 0 1px 0 rgba(255, 255, 255, .2); }
+.btn.red:hover { box-shadow: 0 6px 18px rgba(192, 57, 43, .45); }
+.btn.orange { background: linear-gradient(180deg, #f5a340 0%, #d9821a 100%); border-color: #c47416; color: #fff; box-shadow: 0 2px 6px rgba(217, 130, 26, .35), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.btn.orange:hover { box-shadow: 0 6px 18px rgba(217, 130, 26, .45); }
+.btn.purple { background: linear-gradient(180deg, #8a6ce0 0%, #6b4bb8 100%); border-color: #5f42a6; color: #fff; box-shadow: 0 2px 6px rgba(107, 75, 184, .35), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.btn.ghost:hover { background: var(--surface-2); box-shadow: none; transform: none; }
+.btn:disabled { transform: none !important; box-shadow: none !important; filter: grayscale(.3); }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; transform: scale(0); animation: ripple .55s ease-out forwards; background: rgba(255, 255, 255, .55); }
+.btn:not(.primary):not(.green):not(.red):not(.orange):not(.purple) .ripple, .pay-methods .ripple, .dropdown .ripple { background: rgba(29, 111, 209, .18); }
+@keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
+
+.pay-methods button, .dropdown button, .list li.click, .sheet-actions a, a.stat, .cmd { position: relative; overflow: hidden; transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease; }
+.pay-methods button:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(16, 32, 48, .1); border-color: #b9c6d4; }
+.pay-methods button:active { transform: scale(.96); }
+.pay-methods button.on { box-shadow: 0 0 0 3px rgba(29, 111, 209, .15); }
+a.stat:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16, 32, 48, .08); }
+.seg button { transition: background .14s, color .14s, box-shadow .14s; }
+.modal { animation: pop .18s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes pop { from { transform: translateY(8px) scale(.98); opacity: 0; } }
+.dropdown { animation: pop .14s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .btn, .pay-methods button, a.stat, .modal, .dropdown { transition: none; animation: none; }
+  .btn:hover, .pay-methods button:hover, a.stat:hover { transform: none; }
+  .ripple { display: none; }
+}
+
+/* Sidebar "Satış Yap" düğmesi */
+.nav .satis-btn { margin: 4px 4px 10px; justify-content: center; color: #fff !important; font-weight: 600; padding: 10px 12px; }
+.nav .satis-btn svg.i { opacity: 1; }
+
+/* ---------- Hızlı satış ---------- */
+.modal.xl { max-width: 1060px; }
+.satis { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; min-height: 420px; }
+.satis-sol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.satis-ara { position: relative; }
+.satis-ara > svg.i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.satis-ara input { padding-left: 40px; min-height: 46px; font-size: 1.05rem; border-width: 2px; }
+.sepet { border: 1px solid var(--border); border-radius: var(--radius); flex: 1; overflow-y: auto; max-height: 55vh; }
+.sepet .empty { padding: 60px 20px; }
+.sepet-satir { display: grid; grid-template-columns: minmax(0, 1fr) 124px 100px 96px 34px; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); animation: pop .15s ease-out; }
+.sepet-satir:last-child { border-bottom: 0; }
+.sp-ad { display: flex; flex-direction: column; min-width: 0; }
+.sp-ad b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-fiyat { min-height: 34px; }
+.sp-tutar { text-align: right; font-weight: 700; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.stepper button { width: 34px; height: 34px; border: 0; background: var(--surface-2); color: var(--text); cursor: pointer; display: grid; place-items: center; transition: background .12s; }
+.stepper button:hover { background: var(--primary-soft); color: var(--primary); }
+.stepper button:active { transform: scale(.92); }
+.stepper button svg.i { width: 16px; height: 16px; }
+.stepper input { border: 0; border-radius: 0; text-align: center; min-height: 34px; padding: 4px; width: 100%; min-width: 0; font-weight: 600; }
+.satis-sag { display: flex; flex-direction: column; gap: 14px; }
+.satis-toplam { background: linear-gradient(135deg, #1f2b38, #2c3e52); color: #fff; border-radius: var(--radius); padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 6px 18px rgba(31, 43, 56, .25); }
+.satis-toplam span { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+.satis-toplam b { font-size: 2rem; font-weight: 700; }
+.satis-odeme { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.satis-odeme .btn { min-height: 56px; flex-direction: column; gap: 4px; font-weight: 600; }
+.satis-odeme .btn svg.i { width: 22px; height: 22px; }
+@media (max-width: 760px) {
+  .satis { grid-template-columns: 1fr; min-height: 0; gap: 12px; }
+  .sepet { max-height: none; }
+  .sepet-satir { grid-template-columns: 100px minmax(0, 1.1fr) minmax(0, 1fr) 34px; grid-template-areas: "ad ad ad x" "st fy tt tt"; row-gap: 8px; }
+  .sepet-satir .sp-ad { grid-area: ad; }
+  .sepet-satir .stepper { grid-area: st; }
+  .sepet-satir .sp-fiyat { grid-area: fy; }
+  .sepet-satir .sp-tutar { grid-area: tt; }
+  .sepet-satir [data-a="x"] { grid-area: x; }
+  .satis-sag { position: sticky; bottom: -18px; background: var(--surface); padding: 12px 0 calc(6px + env(safe-area-inset-bottom)); margin: 0 -2px; border-top: 1px solid var(--border); }
+  .satis-toplam { flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 14px; }
+  .satis-toplam b { font-size: 1.5rem; }
+  .satis-odeme { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .satis-odeme .btn { min-height: 58px; font-size: .78rem; padding: 4px; }
+  .stepper button { width: 30px; }
+}
+
+.kbd { font-size: .68rem; opacity: .75; border: 1px solid rgba(255, 255, 255, .45); border-radius: 3px; padding: 0 4px; margin-left: 4px; font-weight: 500; }
+@media (max-width: 899px) { .kbd { display: none; } }

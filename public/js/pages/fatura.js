@@ -3,15 +3,18 @@ import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, mik
 import { FATURA_TUR, KDV_ORANLARI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { urunFormu } from './stok.js';
-import { faturaYazdir } from '../yazdir.js';
+import { faturaYazdir, fisYazdir } from '../yazdir.js';
 
 export async function liste(ctx) {
   const tur = ctx.query.tur === 'alis' ? 'alis' : 'satis';
-  const baslik = tur === 'alis' ? 'Alış Faturaları' : 'Satış Faturaları';
+  const baslik = tur === 'alis' ? 'Alış Faturaları' : 'Satışlar';
   ctx.baslik(baslik);
   ctx.el.innerHTML = `
     <div class="page-h"><h1>${baslik}</h1><div class="actions">
-      <a class="btn primary" href="#/fatura/yeni?tur=${tur}">${icon('plus')} Yeni Fatura</a></div></div>
+      ${tur === 'satis' ? `<a class="btn" href="#/rapor/gunsonu">${icon('receipt')} Gün Sonu</a>
+        <button class="btn" data-aksiyon="fatura-satis">${icon('invoice')} Fatura</button>
+        <button class="btn green" data-aksiyon="satis">${icon('cash')} Satış Yap</button>`
+        : `<button class="btn primary" data-aksiyon="fatura-alis">${icon('plus')} Yeni Fatura</button>`}</div></div>
     <div class="toolbar"><input class="grow" type="search" id="q" placeholder="Ara"></div>
     <div class="card" id="liste" style="margin-top:14px"><div class="spin"></div></div>`;
   const yukle = async () => {
@@ -21,7 +24,7 @@ export async function liste(ctx) {
       kolonlar: [
         { key: 'tarih', label: 'Tarih', type: 'date' },
         { key: 'unvan', label: 'Cari', main: true },
-        { key: 'no', label: 'No', render: (v, s) => `${e(v)}${s.tur.endsWith('iade') ? ' <span class="badge">İade</span>' : ''}` },
+        { key: 'no', label: 'No', render: (v, s) => `${e(v)} <span class="badge ${s.belge_tipi === 'fis' ? 'green' : 'blue'}">${s.tur.endsWith('iade') ? 'İade' : s.belge_tipi === 'fis' ? 'Fiş' : 'Fatura'}</span>` },
         { key: 'genel_toplam', label: 'Tutar', type: 'money' },
       ],
       satirlar: rows,
@@ -43,7 +46,7 @@ export async function goster(ctx) {
     ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">İptal edildi</div>' : ''}
     <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
       <button class="btn" id="yazdir">${icon('print')} Yazdır</button>
-      ${f.iptal ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
+      ${f.iptal || f.kaynak === 'netsis' ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
       <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>`}
     </div></div>
     <div class="grid g2">
@@ -74,7 +77,7 @@ export async function goster(ctx) {
       ${Object.entries(kdvGrup).map(([k, v]) => `<div><span>KDV %${k}</span><span class="num">${sayi(v)}</span></div>`).join('')}
       <div class="g"><span>Genel Toplam</span><span class="num">${tl(f.genel_toplam)}</span></div>
     </div></div></div>`;
-  $('#yazdir').addEventListener('click', () => faturaYazdir(f));
+  $('#yazdir').addEventListener('click', () => (f.belge_tipi === 'fis' ? fisYazdir(f) : faturaYazdir(f)));
   $('#diger')?.addEventListener('click', (ev) => menu('Diğer', [
     ['Düzenle', 'edit', () => { location.hash = `#/fatura/${f.id}/duzenle`; }],
     ['İptal et', 'trash', async () => {

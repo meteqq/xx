@@ -218,3 +218,43 @@ test('yedek indir ve geri yükle', async () => {
   assert.equal(r2.status, 400);
   assert.equal(await bakiye(musteri), once);
 });
+
+test('hızlı satış: nakit, kart, veresiye, parçalı ve iptal', async () => {
+  const urun = (await post('/api/urunler', { ad: 'Kalem', kod: 'K1', satis_fiyat: 1000, kdv: 20, acilis_miktar: 50 })).id;
+  const kalem = (m) => [{ urun_id: urun, aciklama: 'Kalem', miktar: m, birim_fiyat: 1200, kdv: 20 }];
+  const kasaOnce = await hesapBakiye(kasa);
+
+  // Nakit: KDV dahil 12,00 x 3 = 36,00 tam tutmalı; peşin müşteri otomatik oluşur
+  const s1 = await post('/api/satis', { odeme: 'nakit', kalemler: kalem(3) });
+  assert.equal(s1.toplam, 3600);
+  assert.equal(await hesapBakiye(kasa), kasaOnce + 3600);
+  const pesin = (await get('/api/cariler?q=Peşin'))[0];
+  assert.equal(pesin.bakiye, 0);
+  assert.equal((await get(`/api/urunler/${urun}`)).miktar, 47);
+  const f = await get(`/api/faturalar/${s1.fatura_id}`);
+  assert.equal(f.belge_tipi, 'fis');
+  assert.equal(f.kdv_toplam, 600);
+
+  // Kart: POS hesabına girer
+  await post('/api/satis', { odeme: 'kredi_karti', kalemler: kalem(1) });
+
+  // Veresiye müşterisiz olmaz; müşteriyle cari borçlanır
+  await assert.rejects(post('/api/satis', { odeme: 'veresiye', kalemler: kalem(1) }), /müşteri/);
+  const b0 = await bakiye(musteri);
+  await post('/api/satis', { odeme: 'veresiye', cari_id: musteri, kalemler: kalem(2) });
+  assert.equal(await bakiye(musteri), b0 + 2400);
+
+  // Parçalı: 10 nakit + 5 kart, kalan 9 veresiye
+  const s4 = await post('/api/satis', { odeme: 'parcali', cari_id: musteri, nakit: 1000, kart: 500, kalemler: kalem(2) });
+  assert.equal(await bakiye(musteri), b0 + 2400 + 900);
+  await assert.rejects(post('/api/satis', { odeme: 'parcali', nakit: 100, kalemler: kalem(1) }), /müşteri/);
+
+  // Fişi iptal edince tahsilat da geri alınır
+  const kasaSonra = await hesapBakiye(kasa);
+  await api('DELETE', `/api/faturalar/${s4.fatura_id}`);
+  assert.equal(await bakiye(musteri), b0 + 2400);
+  assert.equal(await hesapBakiye(kasa), kasaSonra - 1000);
+
+  const g = await get('/api/rapor/gunsonu');
+  assert.ok(g.satirlar.some((r) => r.kalem.startsWith('Satış')));
+});

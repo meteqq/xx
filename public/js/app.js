@@ -38,7 +38,7 @@ const NAV = [
   ['home', '#/', 'home', 'Güncel Durum'],
   ['sep', 'Satışlar'],
   ['musteri', '#/cariler?tip=musteri', 'users', 'Müşteriler'],
-  ['satis', '#/faturalar?tur=satis', 'invoice', 'Satış Faturaları'],
+  ['satis', '#/faturalar?tur=satis', 'invoice', 'Satışlar'],
   ['sep', 'Giderler'],
   ['tedarikci', '#/cariler?tip=tedarikci', 'users', 'Tedarikçiler'],
   ['alis', '#/faturalar?tur=alis', 'invoice', 'Alış Faturaları'],
@@ -93,7 +93,7 @@ function kabuk() {
   $('#app').innerHTML = `<div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="logo">₺</div><div>Cari Takip<small>${e(firmaAdi)}</small></div></div>
-      <nav class="nav">${NAV.map((n) => (n[0] === 'sep'
+      <nav class="nav"><a href="#" class="btn green satis-btn" data-aksiyon="satis">${icon('cash')} Satış Yap <span class="kbd">F2</span></a>${NAV.map((n) => (n[0] === 'sep'
         ? `<div class="cap">${e(n[1])}</div>`
         : `<a href="${n[1]}" data-nav="${n[0]}">${icon(n[2])}<span>${e(n[3])}</span></a>`)).join('')}
         <div class="sep"></div>
@@ -172,6 +172,10 @@ function aramaKur() {
     $('#search-wrap').classList.remove('open');
   });
   document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'F2' && !document.querySelector('.satis-modal')) {
+      ev.preventDefault();
+      aksiyon('satis', {}, yonlendir);
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') {
       ev.preventDefault();
       $('#search-wrap').classList.add('open');
@@ -182,12 +186,13 @@ function aramaKur() {
 
 // ---------- Yönlendirme ----------
 let aktifSayfa = 0;
-async function yonlendir() {
+async function yonlendir(ev) {
   const [yol, sorgu = ''] = location.hash.slice(1).split('?');
   const query = Object.fromEntries(new URLSearchParams(sorgu));
   const content = $('#content');
   if (!content) return;
-  $$('.modal-bg').forEach((m) => m.remove());
+  // Sayfa değişince açık pencereler kapanır; kayıt sonrası yenilemede açık kalır (ör. art arda satış)
+  if (ev instanceof Event) $$('.modal-bg').forEach((m) => m.remove());
   $('#search-wrap')?.classList.remove('open');
   for (const [re, fn, navTanim] of ROUTES) {
     const m = (yol || '/').match(re);

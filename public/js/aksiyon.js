@@ -4,8 +4,10 @@ import { odemeAc } from './pages/odeme.js';
 import { hesapIslemFormu } from './pages/kasa.js';
 import { cariFormu } from './pages/cariler.js';
 import { urunFormu } from './pages/stok.js';
+import { satisAc } from './pages/satis.js';
 
 export const YENI = [
+  ['satis', 'cash', 'Satış'],
   ['tahsilat', 'in', 'Tahsilat'],
   ['odeme', 'out', 'Ödeme'],
   ['fatura-satis', 'invoice', 'Satış faturası'],
@@ -19,6 +21,8 @@ export const YENI = [
 /** veri: { cari, sekil, hesap } — yenile: kayıttan sonra sayfayı tazeler */
 export function aksiyon(ad, veri = {}, yenile = () => {}) {
   switch (ad) {
+    case 'satis':
+      return satisAc({ cariId: veri.cari, onKaydet: yenile });
     case 'tahsilat':
     case 'odeme':
       return odemeAc({ yon: ad, cariId: veri.cari, sekil: veri.sekil, onKaydet: yenile });

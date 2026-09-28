@@ -122,7 +122,7 @@ export function toast(msg, tip = '', aksiyon = null) {
 export function modal({ title, body = '', footer = '', wide = false, onClose } = {}) {
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
-  bg.innerHTML = `<div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">
+  bg.innerHTML = `<div class="modal ${wide === 'xl' ? 'wide xl' : wide ? 'wide' : ''}" role="dialog" aria-modal="true">
     <div class="modal-h"><h2>${e(title)}</h2><button class="btn ghost icon" data-close aria-label="Kapat">${icon('x')}</button></div>
     <div class="modal-b">${body}</div>
     ${footer ? `<div class="modal-f">${footer}</div>` : ''}
@@ -423,3 +423,16 @@ export function temaDegistir() {
   try { localStorage.setItem('tema', koyu ? 'light' : 'dark'); } catch { /* yok */ }
   temaUygula();
 }
+
+// ---------- Dokunma efekti ----------
+document.addEventListener('pointerdown', (ev) => {
+  const el = ev.target.closest('.btn, .pay-methods button, .dropdown button, .cmd');
+  if (!el || el.disabled) return;
+  const r = el.getBoundingClientRect();
+  const boyut = Math.max(r.width, r.height);
+  const d = document.createElement('span');
+  d.className = 'ripple';
+  d.style.cssText = `width:${boyut}px;height:${boyut}px;left:${ev.clientX - r.left - boyut / 2}px;top:${ev.clientY - r.top - boyut / 2}px`;
+  el.appendChild(d);
+  setTimeout(() => d.remove(), 600);
+});

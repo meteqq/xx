@@ -51,6 +51,25 @@ export async function ekstreYazdir(r) {
     <div class="sign"><div>${e(r.cari.unvan)}<br>Kaşe / İmza</div><div>Kaşe / İmza</div></div>`);
 }
 
+/** 80 mm termal yazıcı için satış fişi */
+export async function fisYazdir(f) {
+  const a = await ayarlar();
+  const satir = (sol, sag, cls = '') => `<div class="fis-s ${cls}"><span>${sol}</span><span>${sag}</span></div>`;
+  const kdvliFiyat = (k) => Math.round(k.birim_fiyat * (1 + k.kdv / 100));
+  yazdir(`<style>@page { size: 80mm auto; margin: 3mm; }</style>
+    <div class="fis">
+      <div class="fis-baslik"><b>${e(a.firma_unvan || '')}</b>${a.firma_adres ? `<div>${e(a.firma_adres)}</div>` : ''}${a.firma_telefon ? `<div>Tel: ${e(a.firma_telefon)}</div>` : ''}</div>
+      ${satir(tarih(f.tarih), e(f.no))}
+      ${f.unvan && !/^Peşin Müşteri$/.test(f.unvan) ? `<div>${e(f.unvan)}</div>` : ''}
+      <hr>
+      ${f.kalemler.map((k) => `<div>${e(k.aciklama)}</div>${satir(`${miktar(k.miktar)} x ${sayi(kdvliFiyat(k))}`, sayi(k.tutar + k.kdv_tutar))}`).join('')}
+      <hr>
+      ${satir('KDV', sayi(f.kdv_toplam))}
+      ${satir('TOPLAM', tl(f.genel_toplam), 'fis-top')}
+      <div class="fis-alt">Teşekkür ederiz</div>
+    </div>`);
+}
+
 /** Tahsilat / ödeme makbuzu */
 export async function makbuzYazdir(i) {
   const a = await ayarlar();

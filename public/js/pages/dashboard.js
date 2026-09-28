@@ -1,5 +1,5 @@
 import { get } from '../api.js';
-import { e, tl, tarih, bakiye } from '../ui.js';
+import { e, icon, tl, tarih, bakiye } from '../ui.js';
 import { HESAP_TIP } from '../sabitler.js';
 
 export async function sayfa(ctx) {
@@ -13,7 +13,12 @@ export async function sayfa(ctx) {
     <span class="lbl">${lbl}</span><span class="val">${val}</span><span class="sub">${alt}</span></a>`;
 
   ctx.el.innerHTML = `
-  <div class="grid g3">
+  <div class="page-h"><h1>Güncel Durum</h1><div class="actions">
+    <a class="btn" href="#/rapor/gunsonu">${icon('receipt')} Gün Sonu</a>
+    <button class="btn green lg" data-aksiyon="satis">${icon('cash')} Satış Yap</button>
+  </div></div>
+  <div class="grid g4">
+    ${panel('#/faturalar?tur=satis', 'Bugünkü satış', tl(d.bugunSatis.toplam), `${d.bugunSatis.adet} satış`)}
     ${panel('#/cariler?tip=musteri&durum=borclu', 'Tahsil edilecek', tl(tr.alacak),
       d.gecikenAlacak ? `<span class="neg">Gecikmiş ${tl(d.gecikenAlacak)}</span>` : 'Gecikmiş yok')}
     ${panel('#/cariler?tip=tedarikci&durum=alacakli', 'Ödenecek', tl(tr.borc),

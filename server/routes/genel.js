@@ -6,6 +6,7 @@ const multer = require('multer');
 const { db, replaceWith } = require('../db');
 const { hata, bugun, gunEkle, sec } = require('../util');
 const { odemeKaydet, islemIptal, SEKIL_AD } = require('../services/islem');
+const { satisKaydet } = require('../services/satis');
 const { rapor, CARI_TUR_AD, HESAP_TIP_AD } = require('../services/rapor');
 const { raporExcel } = require('../services/excel');
 
@@ -27,6 +28,11 @@ function firma() {
 // --- Tahsilat / Ödeme ---
 r.post('/odeme', (req, res) => {
   res.status(201).json({ islem_id: odemeKaydet(req.body || {}) });
+});
+
+// --- Hızlı satış ---
+r.post('/satis', (req, res) => {
+  res.status(201).json(satisKaydet(req.body || {}));
 });
 
 // --- İşlem listesi, detayı ve iptali ---
@@ -110,10 +116,13 @@ r.get('/ozet', (req, res) => {
   }
 
   const yas = rapor('yaslandirma', {}).toplam;
+  const bugunSatis = d.prepare(`SELECT COUNT(*) adet, COALESCE(SUM(CASE WHEN tur = 'satis' THEN genel_toplam ELSE -genel_toplam END), 0) toplam
+    FROM faturalar WHERE iptal = 0 AND tur IN ('satis','satis_iade') AND tarih = ?`).get(t);
   res.json({
     firma: firma(),
     tarih: t,
     gecikenAlacak: yas.g30 + yas.g60 + yas.g90 + yas.g90p,
+    bugunSatis,
     cariBakiye,
     hesaplar,
     bugun: bugunHareket,

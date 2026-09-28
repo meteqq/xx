@@ -14,8 +14,22 @@ function open() {
   conn.pragma('journal_mode = WAL');
   conn.pragma('foreign_keys = ON');
   conn.exec(SCHEMA);
+  migrate(conn);
   seedDefaults(conn);
   return conn;
+}
+
+/** Eski veritabanlarına sonradan eklenen kolonları ekler. */
+function migrate(d) {
+  const kolonEkle = (tablo, kolon, tanim) => {
+    const var_ = d.prepare(`PRAGMA table_info(${tablo})`).all().some((k) => k.name === kolon);
+    if (!var_) d.exec(`ALTER TABLE ${tablo} ADD COLUMN ${kolon} ${tanim}`);
+  };
+  kolonEkle('faturalar', 'belge_tipi', "TEXT NOT NULL DEFAULT 'fatura'");
+  kolonEkle('faturalar', 'tahsilat_islem_id', 'INTEGER');
+  for (const t of ['faturalar', 'cari_hareketler', 'stok_hareketleri', 'hesap_hareketleri', 'cek_senet', 'cariler', 'urunler', 'hesaplar']) {
+    kolonEkle(t, 'kaynak', 'TEXT');
+  }
 }
 
 function seedDefaults(d) {

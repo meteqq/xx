@@ -10,6 +10,7 @@ const tarihler = (bas) => [
 ];
 
 const RAPORLAR = {
+  gunsonu: { ad: 'Gün Sonu', icon: 'receipt', filtre: [{ name: 'tarih', label: 'Tarih', type: 'date', value: bugun() }] },
   ekstre: { ad: 'Cari Hesap Ekstresi', aciklama: 'Bir carinin tarih aralığındaki tüm hareketleri, devir ve bakiye', icon: 'user', filtre: [{ name: 'cari_id', label: 'Cari', type: 'cari' }, ...tarihler(yilBasi())] },
   bakiye: { ad: 'Cari Bakiye Listesi', aciklama: 'Tüm carilerin borç, alacak ve bakiyeleri', icon: 'users', filtre: [
     { name: 'tip', label: 'Tip', type: 'select', options: [['', 'Tümü'], ['musteri', 'Müşteriler'], ['tedarikci', 'Tedarikçiler']] },

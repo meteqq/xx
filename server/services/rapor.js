@@ -336,7 +336,47 @@ function kasaOzet() {
   };
 }
 
+/** Günün satış, tahsilat, masraf ve kasa özeti */
+function gunSonu(p) {
+  const t = p.tarih || bugun();
+  const d = db();
+  const satis = d.prepare(`SELECT COUNT(*) adet, COALESCE(SUM(genel_toplam), 0) toplam FROM faturalar
+    WHERE iptal = 0 AND tur = 'satis' AND tarih = ?`).get(t);
+  const iade = d.prepare(`SELECT COUNT(*) adet, COALESCE(SUM(genel_toplam), 0) toplam FROM faturalar
+    WHERE iptal = 0 AND tur = 'satis_iade' AND tarih = ?`).get(t);
+  const pesinTahsil = d.prepare(`SELECT COALESCE(SUM(h.alacak), 0) t FROM faturalar f JOIN cari_hareketler h ON h.islem_id = f.tahsilat_islem_id
+    WHERE f.iptal = 0 AND f.tur = 'satis' AND f.tarih = ?`).get(t).t;
+  const tahsilat = d.prepare(`SELECT odeme_sekli, SUM(alacak) t FROM cari_hareketler WHERE tur = 'tahsilat' AND tarih = ?
+    GROUP BY odeme_sekli ORDER BY t DESC`).all(t);
+  const odeme = d.prepare("SELECT COALESCE(SUM(borc), 0) t FROM cari_hareketler WHERE tur = 'odeme' AND tarih = ?").get(t).t;
+  const masraf = d.prepare("SELECT COALESCE(SUM(cikis), 0) t FROM hesap_hareketleri WHERE tur IN ('gider','komisyon') AND tarih = ?").get(t).t;
+  const kasa = d.prepare(`SELECT COALESCE(SUM(CASE WHEN x.tarih < @t THEN x.giris - x.cikis END), 0) devir,
+      COALESCE(SUM(CASE WHEN x.tarih = @t THEN x.giris END), 0) giris, COALESCE(SUM(CASE WHEN x.tarih = @t THEN x.cikis END), 0) cikis
+    FROM hesap_hareketleri x JOIN hesaplar h ON h.id = x.hesap_id WHERE h.tip = 'kasa' AND x.tarih <= @t`).get({ t });
+
+  const satirlar = [
+    { kalem: `Satış (${satis.adet} adet)`, tutar: satis.toplam, grup: 'Satış' },
+    { kalem: 'Peşin tahsil edilen', tutar: pesinTahsil, grup: 'Satış' },
+    { kalem: 'Veresiye', tutar: satis.toplam - pesinTahsil, grup: 'Satış' },
+    ...(iade.adet ? [{ kalem: `İade (${iade.adet} adet)`, tutar: -iade.toplam, grup: 'Satış' }] : []),
+    ...tahsilat.map((x) => ({ kalem: `Tahsilat - ${SEKIL_AD[x.odeme_sekli] || 'Diğer'}`, tutar: x.t, grup: 'Tahsilat' })),
+    ...(odeme ? [{ kalem: 'Yapılan ödemeler', tutar: -odeme, grup: 'Ödeme' }] : []),
+    ...(masraf ? [{ kalem: 'Masraflar', tutar: -masraf, grup: 'Ödeme' }] : []),
+    { kalem: 'Kasa devir', tutar: kasa.devir, grup: 'Kasa' },
+    { kalem: 'Kasa giriş', tutar: kasa.giris, grup: 'Kasa' },
+    { kalem: 'Kasa çıkış', tutar: -kasa.cikis, grup: 'Kasa' },
+    { kalem: 'Kasada olması gereken', tutar: kasa.devir + kasa.giris - kasa.cikis, grup: 'Kasa', vurgu: true },
+  ];
+  return {
+    baslik: 'Gün Sonu',
+    alt: trTarih(t),
+    kolonlar: [{ key: 'grup', label: 'Grup' }, { key: 'kalem', label: 'Kalem' }, { key: 'tutar', label: 'Tutar', type: 'money' }],
+    satirlar,
+  };
+}
+
 const RAPORLAR = {
+  gunsonu: gunSonu,
   ekstre, bakiye: bakiyeListesi, yaslandirma, hesap: hesapDefteri, cek: cekListesi, stok: stokDurum,
   fatura: faturaOzet, urun: urunSatis, gelirgider: gelirGider, kasa: kasaOzet,
 };
