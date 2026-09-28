@@ -11,8 +11,8 @@ export async function liste(ctx) {
   const yon = q.yon ?? 'alinan';
   ctx.el.innerHTML = `
     <div class="page-h"><h1>Çek / Senet</h1><div class="actions">
-      <a class="btn green" href="#/odeme?yon=tahsilat&sekil=cek">${icon('in')} Al</a>
-      <a class="btn red" href="#/odeme?yon=odeme&sekil=cek">${icon('out')} Ver</a>
+      <button class="btn primary" data-aksiyon="tahsilat" data-sekil="cek">${icon('in')} Çek / Senet Al</button>
+      <button class="btn" data-aksiyon="odeme" data-sekil="cek">${icon('out')} Çek / Senet Ver</button>
     </div></div>
     <div class="tabs">
       <a href="#/cekler?yon=alinan" class="${yon === 'alinan' ? 'on' : ''}">Alınan</a>

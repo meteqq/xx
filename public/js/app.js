@@ -1,5 +1,5 @@
 import { get, post, yetkisiz } from './api.js';
-import { $, $$, e, icon, toast, modal, debounce, temaUygula } from './ui.js';
+import { $, $$, e, icon, toast, debounce, temaUygula, menu } from './ui.js';
 import * as dashboard from './pages/dashboard.js';
 import * as cariler from './pages/cariler.js';
 import * as odeme from './pages/odeme.js';
@@ -10,11 +10,11 @@ import * as stok from './pages/stok.js';
 import * as fatura from './pages/fatura.js';
 import * as raporlar from './pages/raporlar.js';
 import * as ayarlar from './pages/ayarlar.js';
-import { HIZLI, renkStil } from './sabitler.js';
+import { YENI, aksiyon } from './aksiyon.js';
 
 const ROUTES = [
   [/^\/?$/, dashboard.sayfa, 'home'],
-  [/^\/cariler$/, cariler.liste, 'cariler'],
+  [/^\/cariler$/, cariler.liste, (q) => (q.tip === 'tedarikci' ? 'tedarikci' : 'musteri')],
   [/^\/cari\/(\d+)$/, cariler.detay, 'cariler'],
   [/^\/odeme$/, odeme.sayfa, 'odeme'],
   [/^\/islemler$/, islemler.liste, 'islemler'],
@@ -25,7 +25,7 @@ const ROUTES = [
   [/^\/cek\/(\d+)$/, cekler.detay, 'cekler'],
   [/^\/urunler$/, stok.liste, 'urunler'],
   [/^\/urun\/(\d+)$/, stok.detay, 'urunler'],
-  [/^\/faturalar$/, fatura.liste, 'faturalar'],
+  [/^\/faturalar$/, fatura.liste, (q) => (q.tur === 'alis' ? 'alis' : 'satis')],
   [/^\/fatura\/yeni$/, fatura.form, 'faturalar'],
   [/^\/fatura\/(\d+)$/, fatura.goster, 'faturalar'],
   [/^\/fatura\/(\d+)\/duzenle$/, fatura.form, 'faturalar'],
@@ -35,14 +35,20 @@ const ROUTES = [
 ];
 
 const NAV = [
-  ['home', '#/', 'home', 'Ana Sayfa'],
-  ['cariler', '#/cariler', 'users', 'Cariler'],
-  ['odeme', '#/odeme?yon=tahsilat', 'in', 'Tahsilat / Ödeme'],
-  ['faturalar', '#/faturalar', 'invoice', 'Faturalar'],
-  ['kasa', '#/kasa', 'wallet', 'Kasa & Banka'],
-  ['cekler', '#/cekler', 'cheque', 'Çek / Senet'],
+  ['home', '#/', 'home', 'Güncel Durum'],
+  ['sep', 'Satışlar'],
+  ['musteri', '#/cariler?tip=musteri', 'users', 'Müşteriler'],
+  ['satis', '#/faturalar?tur=satis', 'invoice', 'Satış Faturaları'],
+  ['sep', 'Giderler'],
+  ['tedarikci', '#/cariler?tip=tedarikci', 'users', 'Tedarikçiler'],
+  ['alis', '#/faturalar?tur=alis', 'invoice', 'Alış Faturaları'],
+  ['sep', 'Finans'],
+  ['kasa', '#/kasa', 'wallet', 'Kasa ve Bankalar'],
+  ['cekler', '#/cekler', 'cheque', 'Çek ve Senetler'],
+  ['islemler', '#/islemler', 'list', 'Hareketler'],
+  ['sep', 'Stok'],
   ['urunler', '#/urunler', 'box', 'Ürünler'],
-  ['islemler', '#/islemler', 'list', 'İşlemler'],
+  ['sep', ''],
   ['raporlar', '#/raporlar', 'chart', 'Raporlar'],
   ['ayarlar', '#/ayarlar', 'settings', 'Ayarlar'],
 ];
@@ -87,7 +93,9 @@ function kabuk() {
   $('#app').innerHTML = `<div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="logo">₺</div><div>Cari Takip<small>${e(firmaAdi)}</small></div></div>
-      <nav class="nav">${NAV.map((n) => `<a href="${n[1]}" data-nav="${n[0]}">${icon(n[2])}<span>${e(n[3])}</span></a>`).join('')}
+      <nav class="nav">${NAV.map((n) => (n[0] === 'sep'
+        ? `<div class="cap">${e(n[1])}</div>`
+        : `<a href="${n[1]}" data-nav="${n[0]}">${icon(n[2])}<span>${e(n[3])}</span></a>`)).join('')}
         <div class="sep"></div>
         <a href="#" data-cikis>${icon('logout')}<span>Çıkış</span></a>
       </nav>
@@ -99,12 +107,13 @@ function kabuk() {
         <div class="title" id="page-title"></div>
         <div class="search-wrap" id="search-wrap">${icon('search')}<input type="search" id="global-search" placeholder="Ara" autocomplete="off"><div class="search-results hidden" id="search-results"></div></div>
         <button class="btn ghost icon mobile-only" id="search-btn" aria-label="Ara">${icon('search')}</button>
+        <button class="btn primary desk-only" id="yeni-btn">${icon('plus')} Yeni</button>
       </header>
       <main class="content" id="content"></main>
     </div>
     <nav class="bottom-nav">
       <a href="#/" data-nav="home">${icon('home')}<span>Ana Sayfa</span></a>
-      <a href="#/cariler" data-nav="cariler">${icon('users')}<span>Cariler</span></a>
+      <a href="#/cariler?tip=musteri" data-nav="musteri">${icon('users')}<span>Müşteriler</span></a>
       <button class="fab" id="fab" aria-label="Yeni işlem"><span class="circle">${icon('plus')}</span></button>
       <a href="#/kasa" data-nav="kasa">${icon('wallet')}<span>Kasa</span></a>
       <button id="more-btn">${icon('menu')}<span>Menü</span></button>
@@ -128,20 +137,14 @@ function kabuk() {
     await post('/auth/cikis');
     girisEkrani(true);
   });
-  $('#fab').addEventListener('click', hizliMenu);
+  const yeniMenu = (ev) => menu('Yeni', YENI.map(([k, i, l]) => [l, i, () => aksiyon(k, {}, yonlendir)]), ev.currentTarget);
+  $('#fab').addEventListener('click', yeniMenu);
+  $('#yeni-btn').addEventListener('click', yeniMenu);
   $('#search-btn').addEventListener('click', () => {
     $('#search-wrap').classList.toggle('open');
     $('#global-search').focus();
   });
   aramaKur();
-}
-
-function hizliMenu() {
-  const m = modal({
-    title: 'Yeni İşlem',
-    body: `<div class="sheet-actions">${HIZLI.map(([h, i, l, r]) => `<a href="${h}" data-close><span class="ico" style="${renkStil(r)}">${icon(i)}</span>${e(l)}</a>`).join('')}</div>`,
-  });
-  return m;
 }
 
 function aramaKur() {
@@ -186,9 +189,10 @@ async function yonlendir() {
   if (!content) return;
   $$('.modal-bg').forEach((m) => m.remove());
   $('#search-wrap')?.classList.remove('open');
-  for (const [re, fn, nav] of ROUTES) {
+  for (const [re, fn, navTanim] of ROUTES) {
     const m = (yol || '/').match(re);
     if (!m) continue;
+    const nav = typeof navTanim === 'function' ? navTanim(query) : navTanim;
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === nav));
     const no = ++aktifSayfa;
     content.innerHTML = '<div class="spin"></div>';
@@ -239,6 +243,14 @@ async function baslat() {
 }
 
 window.addEventListener('hashchange', yonlendir);
+
+// data-aksiyon="tahsilat" gibi düğmeler ilgili pencereyi açar
+document.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-aksiyon]');
+  if (!el) return;
+  ev.preventDefault();
+  aksiyon(el.dataset.aksiyon, el.dataset, yonlendir);
+});
 baslat();
 
 if ('serviceWorker' in navigator) {

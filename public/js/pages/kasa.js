@@ -133,7 +133,7 @@ export async function detay(ctx) {
   $('#pr').addEventListener('click', () => raporYazdir(rapor));
   $('#xl').addEventListener('click', () => indir('/api/rapor/hesap/excel?' + qs({ hesap_id: h.id, bas: $('#bas').value, bit: $('#bit').value })));
   $$('[data-islem]').forEach((b) => b.addEventListener('click', () => hesapIslemFormu(b.dataset.islem, h.id, () => ctx.yenile())));
-  $('#diger').addEventListener('click', () => menu('Diğer', [
+  $('#diger').addEventListener('click', (ev) => menu('Diğer', [
     ['Düzenle', 'edit', () => hesapFormu(h, h.tip, () => ctx.yenile())],
     ['Sil', 'trash', async () => {
       if (!await onayla(`"${h.ad}" silinsin mi?`, { ok: 'Sil', tehlikeli: true })) return;
@@ -142,6 +142,6 @@ export async function detay(ctx) {
       toast(r.pasif ? 'Pasife alındı' : 'Silindi', 'ok');
       location.hash = '#/kasa';
     }, true],
-  ]));
+  ], ev.currentTarget));;
   await yukle();
 }

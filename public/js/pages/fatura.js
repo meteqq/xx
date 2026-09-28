@@ -6,16 +6,16 @@ import { urunFormu } from './stok.js';
 import { faturaYazdir } from '../yazdir.js';
 
 export async function liste(ctx) {
-  ctx.baslik('Faturalar');
-  const tur = ctx.query.tur || '';
+  const tur = ctx.query.tur === 'alis' ? 'alis' : 'satis';
+  const baslik = tur === 'alis' ? 'Alış Faturaları' : 'Satış Faturaları';
+  ctx.baslik(baslik);
   ctx.el.innerHTML = `
-    <div class="page-h"><h1>Faturalar</h1><div class="actions">
-      <a class="btn primary" href="#/fatura/yeni?tur=satis">${icon('plus')} Yeni Fatura</a></div></div>
-    <div class="tabs">${[['', 'Tümü'], ['satis', 'Satış'], ['alis', 'Alış']].map(([k, l]) => `<a href="#/faturalar?tur=${k}" class="${tur === k ? 'on' : ''}">${l}</a>`).join('')}</div>
+    <div class="page-h"><h1>${baslik}</h1><div class="actions">
+      <a class="btn primary" href="#/fatura/yeni?tur=${tur}">${icon('plus')} Yeni Fatura</a></div></div>
     <div class="toolbar"><input class="grow" type="search" id="q" placeholder="Ara"></div>
     <div class="card" id="liste" style="margin-top:14px"><div class="spin"></div></div>`;
   const yukle = async () => {
-    const rows = await get('/faturalar?' + qs({ tur, q: $('#q').value }));
+    const rows = (await get('/faturalar?' + qs({ q: $('#q').value }))).filter((r) => r.tur.startsWith(tur));
     if (!ctx.guncel()) return;
     $('#liste').innerHTML = tablo({
       kolonlar: [
@@ -35,7 +35,7 @@ export async function liste(ctx) {
 export async function goster(ctx) {
   const f = await get(`/faturalar/${ctx.params[0]}`);
   if (!ctx.guncel()) return;
-  ctx.baslik(`${f.tur_ad} ${f.no}`, '#/faturalar');
+  ctx.baslik(`${f.tur_ad} ${f.no}`, `#/faturalar?tur=${f.tur.startsWith('alis') ? 'alis' : 'satis'}`);
   const tahsil = f.tur === 'satis' || f.tur === 'alis_iade';
   const kdvGrup = {};
   for (const k of f.kalemler) kdvGrup[k.kdv] = (kdvGrup[k.kdv] || 0) + k.kdv_tutar;
@@ -43,8 +43,8 @@ export async function goster(ctx) {
     ${f.iptal ? '<div class="alert red" style="margin-bottom:14px">İptal edildi</div>' : ''}
     <div class="page-h"><h1>${e(f.tur_ad)} <span class="muted">${e(f.no)}</span></h1><div class="actions">
       <button class="btn" id="yazdir">${icon('print')} Yazdır</button>
-      ${f.iptal ? '' : `<a class="btn ${tahsil ? 'green' : 'red'}" href="#/odeme?yon=${tahsil ? 'tahsilat' : 'odeme'}&cari=${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat' : 'Ödeme'}</a>
-      <button class="btn" id="diger">${icon('dots')} Diğer</button>`}
+      ${f.iptal ? '' : `<button class="btn primary" data-aksiyon="${tahsil ? 'tahsilat' : 'odeme'}" data-cari="${f.cari_id}">${icon(tahsil ? 'in' : 'out')} ${tahsil ? 'Tahsilat Ekle' : 'Ödeme Ekle'}</button>
+      <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>`}
     </div></div>
     <div class="grid g2">
       <div class="card"><div class="card-b"><dl class="kv">
@@ -75,7 +75,7 @@ export async function goster(ctx) {
       <div class="g"><span>Genel Toplam</span><span class="num">${tl(f.genel_toplam)}</span></div>
     </div></div></div>`;
   $('#yazdir').addEventListener('click', () => faturaYazdir(f));
-  $('#diger')?.addEventListener('click', () => menu('Diğer', [
+  $('#diger')?.addEventListener('click', (ev) => menu('Diğer', [
     ['Düzenle', 'edit', () => { location.hash = `#/fatura/${f.id}/duzenle`; }],
     ['İptal et', 'trash', async () => {
       if (!await onayla('Fatura iptal edilsin mi?', { ok: 'İptal Et', tehlikeli: true })) return;
@@ -83,7 +83,7 @@ export async function goster(ctx) {
       toast('İptal edildi', 'ok');
       ctx.yenile();
     }, true],
-  ]));
+  ], ev.currentTarget));;
 }
 
 export async function form(ctx) {
@@ -96,7 +96,7 @@ export async function form(ctx) {
   let cari = cariId ? await get(`/cariler/${cariId}`) : null;
   const yeniNo = duzenle ? f.no : (await get(`/faturalar/yeni-no?tur=${tur}`)).no;
   if (!ctx.guncel()) return;
-  ctx.baslik(duzenle ? `Fatura Düzenle ${f.no}` : 'Yeni Fatura', duzenle ? `#/fatura/${duzenle}` : '#/faturalar');
+  ctx.baslik(duzenle ? `Fatura Düzenle ${f.no}` : 'Yeni Fatura', duzenle ? `#/fatura/${duzenle}` : `#/faturalar?tur=${taban}`);
 
   ctx.el.innerHTML = `
   <div class="card">
@@ -124,7 +124,7 @@ export async function form(ctx) {
     </div>
     <div class="sticky-save">
       <div style="flex:1" class="mobile-only"><div id="gt-m" class="num" style="font-size:1.2rem;font-weight:800"></div></div>
-      <a class="btn desk-only-inline" href="${duzenle ? `#/fatura/${duzenle}` : '#/faturalar'}">Vazgeç</a>
+      <a class="btn desk-only-inline" href="${duzenle ? `#/fatura/${duzenle}` : `#/faturalar?tur=${taban}`}">Vazgeç</a>
       <button class="btn primary lg" id="kaydet">${icon('check')} Kaydet</button>
     </div>
   </div>`;

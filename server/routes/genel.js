@@ -109,9 +109,11 @@ r.get('/ozet', (req, res) => {
     });
   }
 
+  const yas = rapor('yaslandirma', {}).toplam;
   res.json({
     firma: firma(),
     tarih: t,
+    gecikenAlacak: yas.g30 + yas.g60 + yas.g90 + yas.g90p,
     cariBakiye,
     hesaplar,
     bugun: bugunHareket,

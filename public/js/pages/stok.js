@@ -111,7 +111,7 @@ export async function detay(ctx) {
       onSubmit: async (d) => { await post(`/urunler/${u.id}/hareket`, { ...d, tur: t }); toast('Kaydedildi', 'ok'); ctx.yenile(); },
     });
   }));
-  $('#diger').addEventListener('click', () => menu('Diğer', [
+  $('#diger').addEventListener('click', (ev) => menu('Diğer', [
     ['Düzenle', 'edit', () => urunFormu(u, { onKaydet: () => ctx.yenile() })],
     ['Sil', 'trash', async () => {
       if (!await onayla(`"${u.ad}" silinsin mi?`, { ok: 'Sil', tehlikeli: true })) return;
@@ -119,6 +119,6 @@ export async function detay(ctx) {
       toast(r.pasif ? 'Pasife alındı' : 'Silindi', 'ok');
       location.hash = '#/urunler';
     }, true],
-  ]));
+  ], ev.currentTarget));;
 }
 

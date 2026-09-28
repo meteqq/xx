@@ -103,12 +103,19 @@ const P = {
 export const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
 
 // ---------- Bildirim ----------
-export function toast(msg, tip = '') {
+export function toast(msg, tip = '', aksiyon = null) {
   const el = document.createElement('div');
   el.className = `toast ${tip}`;
   el.textContent = msg;
+  if (aksiyon) {
+    const b = document.createElement('button');
+    b.className = 'toast-btn';
+    b.textContent = aksiyon.etiket;
+    b.addEventListener('click', () => { el.remove(); aksiyon.fn(); });
+    el.appendChild(b);
+  }
   $('#toast-root').appendChild(el);
-  setTimeout(() => el.remove(), tip === 'err' ? 5000 : 2800);
+  setTimeout(() => el.remove(), aksiyon ? 7000 : tip === 'err' ? 5000 : 2800);
 }
 
 // ---------- Modal ----------
@@ -135,15 +142,36 @@ export function modal({ title, body = '', footer = '', wide = false, onClose } =
   return { el: bg, body: $('.modal-b', bg), close };
 }
 
-/** Basit seçenek menüsü: [[etiket, ikon, fn, tehlikeli?]] */
-export function menu(baslik, secenekler) {
+/**
+ * Seçenek menüsü: [[etiket, ikon, fn, tehlikeli?]].
+ * Masaüstünde düğmenin altında açılır liste, telefonda alttan açılan pencere olarak gösterilir.
+ */
+export function menu(baslik, secenekler, anchor) {
+  document.querySelector('.dropdown')?.remove();
+  if (anchor && window.matchMedia('(min-width: 900px)').matches) {
+    const r = anchor.getBoundingClientRect();
+    const dd = document.createElement('div');
+    dd.className = 'dropdown';
+    dd.innerHTML = secenekler.map(([l, i, , t], n) => `<button data-n="${n}" class="${t ? 'neg' : ''}">${icon(i)}${e(l)}</button>`).join('');
+    document.body.appendChild(dd);
+    const w = dd.offsetWidth;
+    dd.style.top = `${r.bottom + window.scrollY + 4}px`;
+    dd.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + window.scrollX}px`;
+    const kapat = (ev) => {
+      if (ev && (dd.contains(ev.target) || anchor.contains(ev.target))) return;
+      dd.remove();
+      document.removeEventListener('mousedown', kapat);
+    };
+    setTimeout(() => document.addEventListener('mousedown', kapat));
+    $$('[data-n]', dd).forEach((b) => b.addEventListener('click', () => { kapat(); secenekler[Number(b.dataset.n)][2](); }));
+    return;
+  }
   const m = modal({
     title: baslik,
     body: `<ul class="list">${secenekler.map(([l, i, , t], n) => `<li class="click ${t ? 'neg' : ''}" data-n="${n}">${icon(i)}<div class="grow">${e(l)}</div></li>`).join('')}</ul>`,
   });
   m.body.style.padding = '0';
   $$('[data-n]', m.el).forEach((li) => li.addEventListener('click', () => { m.close(); secenekler[Number(li.dataset.n)][2](); }));
-  return m;
 }
 
 export function onayla(mesaj, { baslik = 'Onay', ok = 'Evet', tehlikeli = false } = {}) {
@@ -327,12 +355,17 @@ export function autocomplete(kap, { ara, placeholder = 'Ara...', secili = null, 
       list.classList.toggle('hidden', !html && !yeniHtml && !inp.value);
     };
     const secim = (it) => { sec = it; ciz(); onSec?.(it); };
+    let sira = 0;
     const calis = debounce(async () => {
-      items = await ara(inp.value.trim());
+      const no = ++sira;
+      const q = inp.value.trim();
+      const sonuc = await ara(q);
+      if (no !== sira || q !== inp.value.trim()) return; // eski aramanın sonucu
+      items = sonuc;
       aktif = 0;
       goster();
     }, 180);
-    inp.addEventListener('input', calis);
+    inp.addEventListener('input', () => { items = []; list.classList.add('hidden'); calis(); });
     inp.addEventListener('focus', calis);
     inp.addEventListener('keydown', (ev) => {
       if (ev.key === 'ArrowDown') { aktif = Math.min(items.length - 1, aktif + 1); goster(); ev.preventDefault(); }

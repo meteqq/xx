@@ -1,17 +1,3 @@
-export const HIZLI = [
-  ['#/odeme?yon=tahsilat', 'in', 'Tahsilat', 'green'],
-  ['#/odeme?yon=odeme', 'out', 'Ödeme', 'red'],
-  ['#/fatura/yeni?tur=satis', 'invoice', 'Fatura', 'blue'],
-  ['#/kasa?islem=gider', 'minus', 'Masraf', 'orange'],
-];
-
-const RENK = {
-  green: 'var(--green-soft);color:var(--green)', red: 'var(--red-soft);color:var(--red)',
-  blue: 'var(--primary-soft);color:var(--primary)', orange: 'var(--orange-soft);color:var(--orange)',
-  purple: 'var(--purple-soft);color:var(--purple)',
-};
-export const renkStil = (r) => `background:${RENK[r]}`;
-
 export const CARI_TIP = { musteri: 'Müşteri', tedarikci: 'Tedarikçi', her_ikisi: 'Müşteri + Tedarikçi' };
 export const DOVIZ = [['TRY', 'TL (₺)'], ['USD', 'Dolar ($)'], ['EUR', 'Euro (€)'], ['GBP', 'Sterlin (£)']];
 

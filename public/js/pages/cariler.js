@@ -4,7 +4,7 @@ import { CARI_TIP, DOVIZ, CEK_DURUM } from '../sabitler.js';
 import { ekstreYazdir } from '../yazdir.js';
 
 // ---------- Cari formu (başka sayfalardan da kullanılır) ----------
-export async function cariFormu(cari = null, { unvan, onKaydet } = {}) {
+export async function cariFormu(cari = null, { unvan, tip, onKaydet } = {}) {
   const yeni = !cari;
   const kod = yeni ? (await get('/cariler/yeni-kod')).kod : cari.kod;
   const alanlar = [
@@ -35,9 +35,9 @@ export async function cariFormu(cari = null, { unvan, onKaydet } = {}) {
     ...(yeni ? [] : [{ name: 'aktif', label: 'Aktif', type: 'check', ek: true }]),
   ];
   return formModal({
-    title: yeni ? 'Yeni Cari' : 'Cari Düzenle',
+    title: yeni ? (tip === 'tedarikci' ? 'Yeni Tedarikçi' : 'Yeni Müşteri') : 'Düzenle',
     alanlar,
-    degerler: { tip: 'musteri', doviz: 'TRY', vade_gun: 0, iskonto: 0, ...(cari || {}), kod, unvan: cari?.unvan || unvan || '' },
+    degerler: { tip: tip || 'musteri', doviz: 'TRY', vade_gun: 0, iskonto: 0, ...(cari || {}), kod, unvan: cari?.unvan || unvan || '' },
     onSubmit: async (d) => {
       const { acilis_tutar, acilis_yon, ...v } = d;
       v.vade_gun = v.vade_gun || 0;
@@ -73,15 +73,16 @@ function cariItem(c) {
 
 // ---------- Liste ----------
 export async function liste(ctx) {
-  ctx.baslik('Cariler');
   const q = ctx.query;
+  const tip = q.tip === 'tedarikci' ? 'tedarikci' : 'musteri';
+  const baslik = tip === 'tedarikci' ? 'Tedarikçiler' : 'Müşteriler';
+  ctx.baslik(baslik);
   ctx.el.innerHTML = `
-    <div class="page-h"><h1>Cariler</h1><div class="actions">
-      <button class="btn primary" id="yeni">${icon('plus')} Yeni Cari</button></div></div>
+    <div class="page-h"><h1>${baslik}</h1><div class="actions">
+      <button class="btn primary" data-aksiyon="cari-${tip}">${icon('plus')} ${tip === 'tedarikci' ? 'Yeni Tedarikçi' : 'Yeni Müşteri'}</button></div></div>
     <div class="toolbar">
       <input class="grow" type="search" id="q" placeholder="Ara" value="${e(q.q || '')}">
-      <select id="filtre"><option value="">Tümü</option><option value="musteri">Müşteriler</option><option value="tedarikci">Tedarikçiler</option>
-        <option value="borclu">Borçlular</option><option value="alacakli">Alacaklılar</option><option value="pasif">Pasifler</option></select>
+      <select id="filtre"><option value="">Tümü</option><option value="borclu">Borçlular</option><option value="alacakli">Alacaklılar</option><option value="pasif">Pasifler</option></select>
     </div>
     <div class="card" id="liste" style="margin-top:14px"><div class="spin"></div></div>`;
   if (q.durum) $('#filtre').value = q.durum;
@@ -89,7 +90,7 @@ export async function liste(ctx) {
     const f = $('#filtre').value;
     const rows = await get('/cariler?' + qs({
       q: $('#q').value,
-      tip: ['musteri', 'tedarikci'].includes(f) ? f : '',
+      tip,
       durum: ['borclu', 'alacakli'].includes(f) ? f : '',
       aktif: f === 'pasif' ? '0' : '',
     }));
@@ -106,9 +107,8 @@ export async function liste(ctx) {
   };
   $('#q').addEventListener('input', debounce(yukle));
   $('#filtre').addEventListener('change', yukle);
-  $('#yeni').addEventListener('click', () => cariFormu());
   await yukle();
-  if (q.yeni) cariFormu();
+  if (q.yeni) cariFormu(null, { tip });
 }
 
 // ---------- Detay ----------
@@ -116,7 +116,7 @@ export async function detay(ctx) {
   const id = ctx.params[0];
   const c = await get(`/cariler/${id}`);
   if (!ctx.guncel()) return;
-  ctx.baslik(c.unvan, '#/cariler');
+  ctx.baslik(c.unvan, `#/cariler?tip=${c.tip === 'tedarikci' ? 'tedarikci' : 'musteri'}`);
   const tel = (c.telefon || '').replace(/\D/g, '');
   const wa = tel ? (tel.startsWith('90') ? tel : tel.startsWith('0') ? '9' + tel : '90' + tel) : '';
   const riskAsim = c.risk_limiti > 0 && c.bakiye > c.risk_limiti;
@@ -139,10 +139,10 @@ export async function detay(ctx) {
         </div>
       </div>
       <div class="btn-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px">
-        <a class="btn green" href="#/odeme?yon=tahsilat&cari=${c.id}">${icon('in')} Tahsilat</a>
-        <a class="btn red" href="#/odeme?yon=odeme&cari=${c.id}">${icon('out')} Ödeme</a>
-        <a class="btn" href="#/fatura/yeni?tur=${c.tip === 'tedarikci' ? 'alis' : 'satis'}&cari=${c.id}">${icon('invoice')} Fatura</a>
-        <button class="btn" id="diger">${icon('dots')} Diğer</button>
+        <button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')} Tahsilat Ekle</button>
+        <button class="btn" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')} Ödeme Ekle</button>
+        <button class="btn" data-aksiyon="fatura-${c.tip === 'tedarikci' ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')} Fatura</button>
+        <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}</button>
       </div>
     </div></div>
 
@@ -184,14 +184,14 @@ export async function detay(ctx) {
     if (!await onayla(`"${c.unvan}" silinsin mi?`, { ok: 'Sil', tehlikeli: true })) return;
     const r = await del(`/cariler/${c.id}`);
     toast(r.pasif ? 'Pasife alındı' : 'Silindi', 'ok');
-    location.hash = '#/cariler';
+    location.hash = `#/cariler?tip=${c.tip === 'tedarikci' ? 'tedarikci' : 'musteri'}`;
   };
-  $('#diger').addEventListener('click', () => menu('Diğer', [
+  $('#diger').addEventListener('click', (ev) => menu('Diğer', [
     [c.tip === 'tedarikci' ? 'Satış faturası' : 'Alış faturası', 'invoice', () => { location.hash = `#/fatura/yeni?tur=${c.tip === 'tedarikci' ? 'satis' : 'alis'}&cari=${c.id}`; }],
     ['Borç / alacak kaydı', 'receipt', dekont],
     ['Düzenle', 'edit', () => cariFormu(c, { onKaydet: () => ctx.yenile() })],
     ['Sil', 'trash', sil, true],
-  ]));
+  ], ev.currentTarget));;
 }
 
 async function hareketTab(c) {
