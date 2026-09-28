@@ -19,7 +19,6 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "cookie-parser": "^1.4.7",
-    "dejavu-fonts-ttf": "^2.37.3",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "mssql": "^12.7.2",

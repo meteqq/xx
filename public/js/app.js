@@ -104,12 +104,13 @@ function kabuk() {
       <header class="topbar">
         <button class="btn ghost icon back" id="menu-btn" aria-label="Menü">${icon('menu')}</button>
         <a class="btn ghost icon hidden" id="geri-btn" aria-label="Geri">${icon('back')}</a>
-        <div class="title" id="page-title"></div>
+        <div class="title" id="page-title"></div><span class="donen" id="sayfa-donen" aria-hidden="true"></span>
         <div class="search-wrap" id="search-wrap">${icon('search')}<input type="search" id="global-search" placeholder="Ara" autocomplete="off"><div class="search-results hidden" id="search-results"></div></div>
         <button class="btn ghost icon mobile-only" id="search-btn" aria-label="Ara">${icon('search')}</button>
         <button class="btn primary desk-only" id="yeni-btn">${icon('plus')} Yeni</button>
       </header>
       <main class="content" id="content"></main>
+      <div class="yukleme-cubugu" id="yukleme" aria-hidden="true"></div>
     </div>
     <nav class="bottom-nav">
       <a href="#/" data-nav="home">${icon('home')}<span>Ana Sayfa</span></a>
@@ -200,9 +201,15 @@ async function yonlendir(ev) {
     const nav = typeof navTanim === 'function' ? navTanim(query) : navTanim;
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === nav));
     const no = ++aktifSayfa;
-    content.innerHTML = '<div class="spin"></div>';
-    baslik('');
-    window.scrollTo(0, 0);
+    const sayfaDegisti = ev instanceof Event || !content.childElementCount;
+    // Yükleme göstergesi kısa gecikmeyle açılır; hızlı açılan sayfada titreme olmaz
+    const gosterge = setTimeout(() => { $('#yukleme')?.classList.add('acik'); $('#sayfa-donen')?.classList.add('acik'); }, 120);
+    if (sayfaDegisti) {
+      content.classList.remove('giris');
+      content.innerHTML = '<div class="spin"></div>';
+      baslik('');
+      window.scrollTo(0, 0);
+    }
     const ctx = {
       el: content, params: m.slice(1), query, baslik,
       guncel: () => no === aktifSayfa,
@@ -213,6 +220,13 @@ async function yonlendir(ev) {
     } catch (err) {
       if (no !== aktifSayfa) return;
       content.innerHTML = `<div class="card empty">${icon('alert')}<div>${e(err.message)}</div><br><a class="btn" href="#/">Ana sayfaya dön</a></div>`;
+    } finally {
+      clearTimeout(gosterge);
+      if (no === aktifSayfa) {
+        $('#yukleme')?.classList.remove('acik');
+        $('#sayfa-donen')?.classList.remove('acik');
+        if (sayfaDegisti) { void content.offsetWidth; content.classList.add('giris'); }
+      }
     }
     return;
   }

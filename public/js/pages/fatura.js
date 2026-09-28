@@ -1,5 +1,5 @@
 import { get, post, put, del } from '../api.js';
-import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, modal, tablo, tabloBagla, debounce, qs } from '../ui.js';
+import { e, $, $$, icon, tl, sayi, tarih, bugun, gunEkle, parseTL, parseNum, miktar, toast, onayla, menu, modal, bekle, tablo, tabloBagla, debounce, qs } from '../ui.js';
 import { FATURA_TUR, KDV_ORANLARI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { urunFormu } from './stok.js';
@@ -284,8 +284,7 @@ export async function form(ctx) {
       tur, cari_id: cari.id, no: $('#no').value.trim(), tarih: $('#tarih').value, vade: $('#vade').value || undefined,
       aciklama: $('#aciklama').value.trim(), kalemler: liste.map(({ el, ...k }) => k),
     };
-    const btn = $('#kaydet');
-    btn.disabled = true;
+    const bitti = bekle($('#kaydet'));
     try {
       const { id } = duzenle ? await put(`/faturalar/${duzenle}`, body) : await post('/faturalar', body);
       if (ctx.modal) {
@@ -298,7 +297,7 @@ export async function form(ctx) {
       }
     } catch (err) {
       toast(err.message, 'err');
-      btn.disabled = false;
+      bitti();
     }
   });
 }

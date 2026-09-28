@@ -1,5 +1,5 @@
 import { get, post } from '../api.js';
-import { e, $, $$, icon, tl, sayi, miktar, parseTL, parseNum, toast, modal, formModal, debounce, qs } from '../ui.js';
+import { e, $, $$, icon, tl, sayi, miktar, parseTL, parseNum, toast, modal, formModal, debounce, qs, bekle } from '../ui.js';
 import { cariSecici } from './cariler.js';
 import { fisYazdir } from '../yazdir.js';
 
@@ -117,11 +117,12 @@ export async function satisAc({ cariId, onKaydet } = {}) {
   ara.addEventListener('blur', () => setTimeout(() => sonucKutu.classList.add('hidden'), 150));
 
   // ---------- Ödeme ----------
-  async function kaydet(odeme, ek = {}) {
+  async function kaydet(odeme, ek = {}, dugme) {
     if (!sepet.length) { toast('Sepete ürün ekleyin', 'err'); ara.focus(); return; }
     if (odeme === 'veresiye' && !cari) { toast('Veresiye için müşteri seçin', 'err'); $m('#s-cari input')?.focus(); return; }
     const dugmeler = $$('[data-o]', m.el);
     dugmeler.forEach((b) => { b.disabled = true; });
+    const bitti = bekle(dugme || $(`[data-o="${odeme}"]`, m.el));
     try {
       const r = await post('/satis', {
         odeme, cari_id: cari?.id, ...ek,
@@ -137,6 +138,7 @@ export async function satisAc({ cariId, onKaydet } = {}) {
     } catch (err) {
       toast(err.message, 'err');
     } finally {
+      bitti();
       dugmeler.forEach((b) => { b.disabled = false; });
     }
   }

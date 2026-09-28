@@ -120,6 +120,14 @@ export function toast(msg, tip = '', aksiyon = null) {
   setTimeout(() => el.remove(), aksiyon ? 7000 : tip === 'err' ? 5000 : 2800);
 }
 
+/** Düğmeyi işlem sürerken kilitler ve içinde dönen daire gösterir. Geri döndürülen fonksiyon eski haline getirir. */
+export function bekle(btn) {
+  if (!btn) return () => {};
+  btn.disabled = true;
+  btn.classList.add('bekliyor');
+  return () => { btn.disabled = false; btn.classList.remove('bekliyor'); };
+}
+
 // ---------- Modal ----------
 export function modal({ title, body = '', footer = '', wide = false, onClose } = {}) {
   const bg = document.createElement('div');
@@ -217,14 +225,14 @@ export function formModal({ title, alanlar, degerler = {}, kaydet = 'Kaydet', wi
       }
     }
     const btn = $('[data-save]', m.el);
-    btn.disabled = true;
+    const bitti = bekle(btn);
     try {
       await onSubmit(data, m);
       m.close();
     } catch (err) {
       toast(err.message, 'err');
     } finally {
-      btn.disabled = false;
+      bitti();
     }
   };
   form.addEventListener('submit', gonder);

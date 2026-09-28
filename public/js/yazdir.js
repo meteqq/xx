@@ -45,10 +45,6 @@ export async function ekstreYazdir(r) {
       <dt>Bakiye</dt><dd><b>${tl(Math.abs(son), c.doviz)} ${son > 0 ? '(Borçlu)' : son < 0 ? '(Alacaklı)' : ''}</b></dd></dl></div>
   </div>`;
   await raporYazdir({ ...r, baslik: 'Cari Hesap Ekstresi' }, bilgi);
-  const pr = document.querySelector('#print-area .pr');
-  pr.insertAdjacentHTML('beforeend', `<p class="note">Yukarıdaki ekstreye göre ${tarih(bugun())} tarihi itibarıyla bakiyeniz
-    <b>${tl(Math.abs(son), c.doviz)} ${son > 0 ? 'borç' : son < 0 ? 'alacak' : ''}</b> olarak görünmektedir. Mutabık olup olmadığınızı bildirmenizi rica ederiz.</p>
-    <div class="sign"><div>${e(r.cari.unvan)}<br>Kaşe / İmza</div><div>Kaşe / İmza</div></div>`);
 }
 
 /** 80 mm termal yazıcı için satış fişi */

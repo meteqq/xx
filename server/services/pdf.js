@@ -1,11 +1,10 @@
-// Ekstre, rapor, fatura ve makbuz PDF çıktıları (pdfkit + DejaVu yazı tipi: Türkçe karakterler için)
+// Ekstre, rapor, fatura ve makbuz PDF çıktıları (pdfkit + IBM Plex Sans: Türkçe karakterler ve web ile aynı görünüm)
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { db } = require('../db');
 
-const FONT_DIR = path.join(path.dirname(require.resolve('dejavu-fonts-ttf/package.json')), 'ttf');
-const FONT = path.join(FONT_DIR, 'DejaVuSansCondensed.ttf');
-const FONT_B = path.join(FONT_DIR, 'DejaVuSansCondensed-Bold.ttf');
+const FONT = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-Regular.woff');
+const FONT_B = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-SemiBold.woff');
 const RENK = { koyu: '#1f2b38', gri: '#667585', cizgi: '#d5dde6', zemin: '#f1f4f8', vurgu: '#1d6fd1' };
 
 const nf = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -90,13 +89,6 @@ function bilgiKutulari(doc, sol, sag) {
 /** Ortak rapor yapısından tablo çizer (sayfa taşarsa başlık tekrarlanır). */
 function tablo(doc, r) {
   const genislik = doc.page.width - 72;
-  const sabit = { date: 54, money: 70, bakiye: 80, number: 48 };
-  const metin = r.kolonlar.filter((k) => !sabit[k.type] && k.key !== 'belge_no');
-  const sabitToplam = r.kolonlar.reduce((a, k) => a + (sabit[k.type] || (k.key === 'belge_no' ? 84 : 0)), 0);
-  const agirlik = (k) => (['aciklama', 'unvan', 'ad', 'kalem', 'cari_unvan', 'kesideci'].includes(k.key) ? 2.2 : 1);
-  const topAgirlik = metin.reduce((a, k) => a + agirlik(k), 0) || 1;
-  const kalan = Math.max(genislik - sabitToplam, 60);
-  const gen = r.kolonlar.map((k) => sabit[k.type] || (k.key === 'belge_no' ? 84 : (kalan * agirlik(k)) / topAgirlik));
   const sag = (k) => ['money', 'bakiye', 'number'].includes(k.type);
   const hucre = (k, v) => {
     if (v === undefined || v === null || v === '') return '';
@@ -106,6 +98,35 @@ function tablo(doc, r) {
     if (k.type === 'number') return miktar(v);
     return String(v);
   };
+  // Sütun genişlikleri içerikten ölçülür: kısa sütunlar tek satır, kalan genişlik açıklama türü sütunlara
+  const ESNEK = ['aciklama', 'unvan', 'ad', 'kalem', 'cari_unvan', 'kesideci', 'odeme_sekli_ad'];
+  const olc = (k) => {
+    doc.font('b').fontSize(7.5);
+    let w = doc.widthOfString(k.label.toLocaleUpperCase('tr-TR'));
+    doc.font('n').fontSize(8.5);
+    for (const s of r.satirlar) w = Math.max(w, doc.widthOfString(hucre(k, s[k.key])));
+    if (r.toplam && r.toplam[k.key] !== undefined) { doc.font('b'); w = Math.max(w, doc.widthOfString(hucre(k, r.toplam[k.key]))); }
+    return Math.ceil(w) + 10;
+  };
+  const dogal = r.kolonlar.map(olc);
+  const esnek = r.kolonlar.map((k) => ESNEK.includes(k.key) || (!k.type && dogal[r.kolonlar.indexOf(k)] > 170));
+  const sabitToplam = dogal.reduce((a, w, i) => a + (esnek[i] ? 0 : w), 0);
+  const esnekSayi = esnek.filter(Boolean).length;
+  let gen;
+  if (esnekSayi) {
+    const kalan = genislik - sabitToplam;
+    const esnekDogal = dogal.reduce((a, w, i) => a + (esnek[i] ? w : 0), 0);
+    if (kalan >= esnekSayi * 90) {
+      // Esnek sütunlar doğal genişliklerine oranla kalan alanı paylaşır
+      gen = dogal.map((w, i) => (esnek[i] ? (kalan * Math.max(w, 90)) / Math.max(esnekDogal, esnekSayi * 90) : w));
+    } else {
+      // Yer yoksa tüm sütunlar orantılı küçülür (kısa sütunlar da gerekirse satır kırar)
+      gen = dogal.map((w) => (w * genislik) / dogal.reduce((a, x) => a + x, 0));
+    }
+  } else {
+    const top = dogal.reduce((a, w) => a + w, 0);
+    gen = dogal.map((w) => (w * genislik) / top);
+  }
   const altSinir = () => doc.page.height - 50;
 
   const basliklar = () => {
@@ -177,11 +198,6 @@ function ekstrePdf(r) {
       ['Toplam alacak', `${para(r.toplam.alacak)} TL`], ['Tarih', tarih(new Date().toISOString())],
     ]);
     tablo(doc, r);
-    doc.moveDown(1.2).font('n').fontSize(8.5).fillColor(RENK.koyu).text(
-      `Yukarıdaki ekstreye göre ${tarih(new Date().toISOString())} tarihi itibarıyla bakiyeniz ${para(Math.abs(son))} TL ${durum.toLocaleLowerCase('tr-TR')} olarak görünmektedir. `
-      + 'Mutabık olup olmadığınızı bildirmenizi rica ederiz.', 36, doc.y, { width: doc.page.width - 72 },
-    );
-    imzaAlani(doc, c.unvan, a.firma_unvan);
   });
 }
 

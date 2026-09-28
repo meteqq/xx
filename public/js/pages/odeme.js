@@ -1,5 +1,5 @@
 import { get, post, hesaplar } from '../api.js';
-import { e, $, $$, icon, tl, tarih, bugun, parseTL, parseNum, toast, modal } from '../ui.js';
+import { e, $, $$, icon, tl, tarih, bugun, parseTL, parseNum, toast, modal, bekle } from '../ui.js';
 import { ODEME_SEKLI } from '../sabitler.js';
 import { cariSecici } from './cariler.js';
 import { makbuzYazdir } from '../yazdir.js';
@@ -181,8 +181,7 @@ export async function odemeAc({ yon: ilkYon, cariId, sekil, onKaydet } = {}) {
       satirlar.push(satir);
     }
     if (!satirlar.length) return toast('Ödeme şekli ekleyin', 'err');
-    const btn = $m('#kaydet');
-    btn.disabled = true;
+    const bitti = bekle($m('#kaydet'));
     try {
       const { islem_id } = await post('/odeme', {
         yon, cari_id: secCari.id, tarih: $m('#tarih').value, aciklama: $m('#aciklama').value.trim(), satirlar,
@@ -193,7 +192,7 @@ export async function odemeAc({ yon: ilkYon, cariId, sekil, onKaydet } = {}) {
       onKaydet?.(islem_id);
     } catch (err) {
       toast(err.message, 'err');
-      btn.disabled = false;
+      bitti();
     }
   });
   return m;
