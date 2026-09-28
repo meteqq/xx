@@ -27,6 +27,7 @@ function migrate(d) {
   };
   kolonEkle('faturalar', 'belge_tipi', "TEXT NOT NULL DEFAULT 'fatura'");
   kolonEkle('faturalar', 'tahsilat_islem_id', 'INTEGER');
+  d.exec('CREATE INDEX IF NOT EXISTS ix_fatura_tahsilat ON faturalar(tahsilat_islem_id)');
   for (const t of ['faturalar', 'cari_hareketler', 'stok_hareketleri', 'hesap_hareketleri', 'cek_senet', 'cariler', 'urunler', 'hesaplar']) {
     kolonEkle(t, 'kaynak', 'TEXT');
   }
@@ -52,13 +53,19 @@ function close() {
 }
 
 /** Yedek dosyasıyla veritabanını değiştirir. */
-function replaceWith(file) {
+function replaceWith(file, oncekiYedek) {
   const test = new Database(file, { readonly: true });
   try {
     const tablo = test.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cari_hareketler'").get();
     if (!tablo) throw Object.assign(new Error('Geçerli bir yedek dosyası değil'), { status: 400 });
+    if (test.pragma('integrity_check', { simple: true }) !== 'ok') throw Object.assign(new Error('Yedek dosyası bozuk'), { status: 400 });
   } finally {
     test.close();
+  }
+  // Mevcut veriler, geri yüklemeden önce saklanır
+  if (oncekiYedek) {
+    fs.mkdirSync(path.dirname(oncekiYedek), { recursive: true });
+    db().prepare('VACUUM INTO ?').run(oncekiYedek);
   }
   close();
   for (const ek of ['-wal', '-shm']) fs.rmSync(DB_FILE + ek, { force: true });

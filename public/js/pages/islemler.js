@@ -43,7 +43,7 @@ export async function detay(ctx) {
     <div class="page-h"><h1>${e(i.tur_ad)} <span class="muted">#${i.id}</span></h1><div class="actions">
       ${makbuzluk ? '<span id="m-cikti"></span>' : ''}
       ${i.fatura ? `<a class="btn" href="#/fatura/${i.fatura.id}">${icon('invoice')} Fatura</a>` : ''}
-      <button class="btn danger-text" id="iptal">${icon('undo')} Geri Al</button>
+      ${i.geri_alinabilir ? `<button class="btn danger-text" id="iptal">${icon('undo')} Geri Al</button>` : ''}
     </div></div>
     <div class="card"><div class="card-b"><dl class="kv">
       <dt>Tarih</dt><dd>${tarih(i.tarih)}</dd>
@@ -85,7 +85,7 @@ export async function detay(ctx) {
       metin: `Sayın ${i.cari[0].unvan}, ${i.tur === 'tahsilat' ? 'tahsilat' : 'ödeme'} makbuzunuz ektedir.`,
     });
   }
-  $('#iptal').addEventListener('click', async () => {
+  $('#iptal')?.addEventListener('click', async () => {
     if (!await onayla('İşlem geri alınsın mı?', { ok: 'Geri Al', tehlikeli: true })) return;
     try {
       await del(`/islemler/${i.id}`);

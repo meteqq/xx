@@ -354,14 +354,26 @@ export function tablo(r, { onRow, bos = 'Kayıt bulunamadı', ekKolon } = {}) {
   if (!r.satirlar.length) return `<div class="empty">${icon('list')}<div>${e(bos)}</div></div>`;
   return `<div class="tbl-wrap"><table class="tbl cards">
     <thead><tr>${kol.map((k) => `<th class="${sag(k) ? 'r' : ''}">${e(k.label)}</th>`).join('')}${ekKolon ? '<th></th>' : ''}</tr></thead>
-    <tbody>${r.satirlar.map((s, idx) => `<tr ${onRow ? `class="click" data-i="${idx}"` : ''}>${kol.map((k, i) => td(k, i, s[k.key], s)).join('')}${ekKolon ? `<td class="act r">${ekKolon(s)}</td>` : ''}</tr>`).join('')}</tbody>
+    <tbody>${r.satirlar.map((s, idx) => `<tr class="${onRow ? 'click' : ''} ${idx >= SAYFA ? 'fazla' : ''}" data-i="${idx}">${kol.map((k, i) => td(k, i, s[k.key], s)).join('')}${ekKolon ? `<td class="act r">${ekKolon(s)}</td>` : ''}</tr>`).join('')}</tbody>
     ${r.toplam ? `<tfoot><tr>${kol.map((k, i) => {
       const v = r.toplam[k.key];
       if (i === 0 && v === undefined) return '<td>TOPLAM</td>';
       return `<td class="${sag(k) ? 'r' : ''} ${i === amtIdx ? 'amt-col' : ''}" ${v !== undefined && v !== '' ? `data-l="${e(k.label)}"` : ''}>${v === undefined ? '' : hucre(k, v)}</td>`;
     }).join('')}${ekKolon ? '<td></td>' : ''}</tr></tfoot>` : ''}
-  </table></div>`;
+  </table>${r.satirlar.length > SAYFA ? `<button type="button" class="btn ghost block daha-fazla" data-daha>Daha fazla göster (${r.satirlar.length - SAYFA})</button>` : ''}</div>`;
 }
+
+// Uzun listelerde ilk SAYFA satır gösterilir; "Daha fazla göster" sıradakileri açar
+const SAYFA = 200;
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-daha]');
+  if (!b) return;
+  const gizli = [...b.parentElement.querySelectorAll('tbody tr.fazla')];
+  gizli.slice(0, SAYFA).forEach((tr) => tr.classList.remove('fazla'));
+  const kalan = gizli.length - SAYFA;
+  if (kalan > 0) b.textContent = `Daha fazla göster (${kalan})`;
+  else b.remove();
+});
 
 export function tabloBagla(root, satirlar, onRow) {
   root.querySelectorAll('tr.click').forEach((tr) => {

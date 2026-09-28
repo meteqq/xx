@@ -56,12 +56,28 @@ router.get('/durum', (req, res) => {
   res.json({ kurulu: !!sifreHash(), girisli: oturumGecerli(req) });
 });
 
+// İlk kurulum, sunucu konsoluna yazılan kodla yapılır: yayına alınan sunucuyu ilk açan yabancı şifre belirleyemez
+let kurulumKodu = null;
+function kurulumKoduHazirla() {
+  if (sifreHash()) return null;
+  kurulumKodu = process.env.KURULUM_KODU || String(crypto.randomInt(100000, 1000000));
+  console.log(`\n  Kurulum kodu: ${kurulumKodu}\n  (İlk girişte şifre belirlerken bu kodu yazın)\n`);
+  return kurulumKodu;
+}
+
 router.post('/kurulum', (req, res) => {
   if (sifreHash()) throw hata(400, 'Şifre zaten belirlenmiş');
-  const { sifre, firma_unvan } = req.body || {};
+  limitKontrol(req.ip);
+  const { sifre, firma_unvan, kod } = req.body || {};
+  if (!kurulumKodu) kurulumKoduHazirla();
+  if (String(kod || '').trim() !== kurulumKodu) {
+    hataliDeneme(req.ip);
+    throw hata(400, 'Kurulum kodu hatalı. Kod, sunucu açılırken konsola yazılır.');
+  }
   sifreKontrol(sifre);
   db().prepare("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('sifre_hash', ?)").run(bcrypt.hashSync(sifre, 10));
   if (firma_unvan) db().prepare("UPDATE ayarlar SET deger = ? WHERE anahtar = 'firma_unvan'").run(String(firma_unvan));
+  kurulumKodu = null;
   oturumAc(res, req);
   res.json({ ok: true });
 });
@@ -75,7 +91,7 @@ router.post('/giris', (req, res) => {
     throw hata(401, 'Şifre hatalı');
   }
   denemeler.delete(req.ip);
-  db().prepare("DELETE FROM oturumlar WHERE bitis < datetime('now')").run();
+  db().prepare('DELETE FROM oturumlar WHERE bitis < ?').run(new Date().toISOString());
   oturumAc(res, req);
   res.json({ ok: true });
 });
@@ -102,4 +118,4 @@ function gerekli(req, res, next) {
   next();
 }
 
-module.exports = { router, gerekli };
+module.exports = { router, gerekli, kurulumKoduHazirla };

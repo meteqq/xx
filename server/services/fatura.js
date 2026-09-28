@@ -43,7 +43,7 @@ function sonrakiNo(tur, belgeTipi = 'fatura') {
 
 function faturaKaydet(g, mevcutId = null) {
   const tur = secenek(g.tur, Object.keys(TURLER), 'Fatura türü');
-  const belgeTipi = g.belge_tipi === 'fis' ? 'fis' : 'fatura';
+  let belgeTipi = g.belge_tipi === 'fis' ? 'fis' : 'fatura';
   const tanim = TURLER[tur];
   const cari = cariGetir(g.cari_id);
   const t = tarih(g.tarih || bugun());
@@ -58,10 +58,22 @@ function faturaKaydet(g, mevcutId = null) {
 
   return tx(() => {
     let no = g.no && String(g.no).trim();
+    let tahsilatIslem = null;
     if (mevcutId) {
       const eski = db().prepare('SELECT * FROM faturalar WHERE id = ?').get(mevcutId);
       if (!eski || eski.iptal) throw hata(404, 'Fatura bulunamadı');
       if (eski.kaynak === 'netsis') throw hata(400, 'Netsis\'ten aktarılan faturalar değiştirilemez');
+      // Fiş fiş olarak kalır; satışla alınan ödemenin bağı korunur, bu yüzden tutarı ve müşterisi değişemez
+      belgeTipi = eski.belge_tipi;
+      if (eski.tahsilat_islem_id && db().prepare('SELECT 1 FROM islemler WHERE id = ?').get(eski.tahsilat_islem_id)) {
+        tahsilatIslem = eski.tahsilat_islem_id;
+        if (genel !== eski.genel_toplam) throw hata(400, 'Ödemesi alınmış satışın tutarı değiştirilemez. Satışı iptal edip yeniden girin.');
+        if (cari.id !== eski.cari_id) throw hata(400, 'Ödemesi alınmış satışın müşterisi değiştirilemez. Satışı iptal edip yeniden girin.');
+        if (t !== eski.tarih) {
+          for (const tablo of ['cari_hareketler', 'hesap_hareketleri']) db().prepare(`UPDATE ${tablo} SET tarih = ? WHERE islem_id = ?`).run(t, tahsilatIslem);
+          db().prepare('UPDATE islemler SET tarih = ? WHERE id = ?').run(t, tahsilatIslem);
+        }
+      }
       if (eski.islem_id) islemIptal(eski.islem_id);
       db().prepare('DELETE FROM faturalar WHERE id = ?').run(mevcutId);
       no = no || eski.no;
@@ -72,10 +84,10 @@ function faturaKaydet(g, mevcutId = null) {
 
     const islem_id = yeniIslem('fatura', t, g.aciklama, no);
     const fatura_id = db().prepare(`INSERT INTO faturalar
-      (${mevcutId ? 'id, ' : ''}islem_id, tur, belge_tipi, no, cari_id, tarih, vade, ara_toplam, iskonto, kdv_toplam, genel_toplam, aciklama)
-      VALUES (${mevcutId ? '@id, ' : ''}@islem_id, @tur, @belge_tipi, @no, @cari_id, @tarih, @vade, @ara, @isk, @kdv, @genel, @aciklama)`)
+      (${mevcutId ? 'id, ' : ''}islem_id, tur, belge_tipi, no, cari_id, tarih, vade, ara_toplam, iskonto, kdv_toplam, genel_toplam, aciklama, tahsilat_islem_id)
+      VALUES (${mevcutId ? '@id, ' : ''}@islem_id, @tur, @belge_tipi, @no, @cari_id, @tarih, @vade, @ara, @isk, @kdv, @genel, @aciklama, @tahsilat)`)
       .run({ id: mevcutId, islem_id, tur, belge_tipi: belgeTipi, no, cari_id: cari.id, tarih: t, vade, ara, isk: ara - net, kdv: kdvT, genel,
-        aciklama: g.aciklama || null }).lastInsertRowid;
+        aciklama: g.aciklama || null, tahsilat: tahsilatIslem }).lastInsertRowid;
 
     const kalemEkle = db().prepare(`INSERT INTO fatura_kalemleri
       (fatura_id, urun_id, aciklama, miktar, birim, birim_fiyat, iskonto, kdv, tutar, kdv_tutar)
@@ -109,4 +121,16 @@ function faturaGetir(id) {
   return f;
 }
 
-module.exports = { TURLER, faturaKaydet, faturaGetir, sonrakiNo, kalemHesapla };
+/** Faturayı / fişi iptal eder; satışla birlikte alınan ödeme de geri alınır. */
+function faturaIptal(id) {
+  const f = db().prepare('SELECT * FROM faturalar WHERE id = ?').get(id);
+  if (!f || f.iptal) throw hata(404, 'Fatura bulunamadı');
+  if (f.kaynak === 'netsis') throw hata(400, 'Netsis\'ten aktarılan faturalar iptal edilemez');
+  tx(() => {
+    if (f.tahsilat_islem_id && db().prepare('SELECT 1 FROM islemler WHERE id = ?').get(f.tahsilat_islem_id)) islemIptal(f.tahsilat_islem_id);
+    if (f.islem_id) islemIptal(f.islem_id);
+    else db().prepare('UPDATE faturalar SET iptal = 1 WHERE id = ?').run(f.id);
+  });
+}
+
+module.exports = { TURLER, faturaKaydet, faturaGetir, faturaIptal, sonrakiNo, kalemHesapla };

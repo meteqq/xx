@@ -273,16 +273,15 @@ export async function form(ctx) {
     return d;
   }
 
+  // KDV dahil fiyatlar sunucuda ayrıştırılır (satır toplamı kuruşu kuruşuna korunur)
   function kalemler() {
     const kdvDahil = $('#kdvdahil').checked;
     return $$('#lines .line:not(.head)').map((d) => {
       const v = Object.fromEntries($$('[data-f]', d).map((i) => [i.dataset.f, i.value]));
-      const kdv = Number(v.kdv);
-      let fiyat = parseTL(v.birim_fiyat) || 0;
-      if (kdvDahil) fiyat = Math.round(fiyat / (1 + kdv / 100));
       return {
         el: d, urun_id: d.dataset.urun ? Number(d.dataset.urun) : null, aciklama: v.aciklama.trim(),
-        miktar: parseNum(v.miktar), birim: v.birim, birim_fiyat: fiyat, iskonto: parseNum(v.iskonto) || 0, kdv,
+        miktar: parseNum(v.miktar), birim: v.birim, birim_fiyat: parseTL(v.birim_fiyat) || 0, iskonto: parseNum(v.iskonto) || 0,
+        kdv: Number(v.kdv), kdv_dahil: kdvDahil,
       };
     });
   }
@@ -292,9 +291,19 @@ export async function form(ctx) {
     let isk = 0;
     const kdvGrup = {};
     for (const k of kalemler()) {
-      const brut = Math.round((k.miktar || 0) * k.birim_fiyat);
-      const net = Math.round(brut * (1 - (k.iskonto || 0) / 100));
-      const kdv = Math.round(net * k.kdv / 100);
+      let brut;
+      let net;
+      let kdv;
+      if (k.kdv_dahil) {
+        const dahil = Math.round((k.miktar || 0) * k.birim_fiyat * (1 - (k.iskonto || 0) / 100));
+        kdv = Math.round(dahil * k.kdv / (100 + k.kdv));
+        net = dahil - kdv;
+        brut = k.iskonto ? Math.round(net / (1 - k.iskonto / 100)) : net;
+      } else {
+        brut = Math.round((k.miktar || 0) * k.birim_fiyat);
+        net = Math.round(brut * (1 - (k.iskonto || 0) / 100));
+        kdv = Math.round(net * k.kdv / 100);
+      }
       ara += brut;
       isk += brut - net;
       kdvGrup[k.kdv] = (kdvGrup[k.kdv] || 0) + kdv;
@@ -311,7 +320,11 @@ export async function form(ctx) {
 
   $('#kdvdahil').addEventListener('change', hesapla);
   $('#ekle').addEventListener('click', () => $('[data-f=aciklama]', satirEkle()).focus());
-  if (f) f.kalemler.forEach((k) => satirEkle(k));
+  // Fiş, müşterinin ödediği KDV dahil fiyatlarla açılır
+  if (f?.belge_tipi === 'fis') {
+    $('#kdvdahil').checked = true;
+    f.kalemler.forEach((k) => satirEkle({ ...k, birim_fiyat: Math.round((k.tutar + k.kdv_tutar) / k.miktar), iskonto: 0 }));
+  } else if (f) f.kalemler.forEach((k) => satirEkle(k));
   else satirEkle();
 
   $('#kaydet').addEventListener('click', async () => {
@@ -331,7 +344,7 @@ export async function form(ctx) {
       const { id } = duzenle ? await put(`/faturalar/${duzenle}`, body) : await post('/faturalar', body);
       if (ctx.modal) {
         ctx.modal.close();
-        toast('Fatura kaydedildi', 'ok', { etiket: 'Görüntüle', fn: () => { location.hash = `#/fatura/${id}`; } });
+        toast('Kaydedildi', 'ok', { etiket: 'Görüntüle', fn: () => { location.hash = `#/fatura/${id}`; } });
         ctx.onKaydet?.(id);
       } else {
         toast('Fatura kaydedildi', 'ok');

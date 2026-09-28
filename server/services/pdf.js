@@ -3,8 +3,8 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 const { db } = require('../db');
 
-const FONT = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-Regular.woff');
-const FONT_B = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-SemiBold.woff');
+const FONT = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-Regular.ttf');
+const FONT_B = path.join(__dirname, '..', 'fonts', 'IBMPlexSans-SemiBold.ttf');
 const RENK = { koyu: '#1f2b38', gri: '#667585', cizgi: '#d5dde6', zemin: '#f1f4f8', vurgu: '#1d6fd1' };
 
 const nf = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -100,12 +100,19 @@ function tablo(doc, r) {
   };
   // Sütun genişlikleri içerikten ölçülür: kısa sütunlar tek satır, kalan genişlik açıklama türü sütunlara
   const ESNEK = ['aciklama', 'unvan', 'ad', 'kalem', 'cari_unvan', 'kesideci', 'odeme_sekli_ad'];
+  // Metin ölçümü pahalı: aynı metin (tarih, tutar, işlem adı) bir kez ölçülür
+  const olcum = new Map();
+  const en = (font, t) => {
+    const a = `${font}|${t}`;
+    if (!olcum.has(a)) olcum.set(a, doc.font(font).widthOfString(t));
+    return olcum.get(a);
+  };
   const olc = (k) => {
-    doc.font('b').fontSize(7.5);
-    let w = doc.widthOfString(k.label.toLocaleUpperCase('tr-TR'));
-    doc.font('n').fontSize(8.5);
-    for (const s of r.satirlar) w = Math.max(w, doc.widthOfString(hucre(k, s[k.key])));
-    if (r.toplam && r.toplam[k.key] !== undefined) { doc.font('b'); w = Math.max(w, doc.widthOfString(hucre(k, r.toplam[k.key]))); }
+    doc.fontSize(7.5);
+    let w = en('b', k.label.toLocaleUpperCase('tr-TR'));
+    doc.fontSize(8.5);
+    for (const s of r.satirlar) w = Math.max(w, en('n', hucre(k, s[k.key])));
+    if (r.toplam && r.toplam[k.key] !== undefined) w = Math.max(w, en('b', hucre(k, r.toplam[k.key])));
     return Math.ceil(w) + 10;
   };
   const dogal = r.kolonlar.map(olc);
@@ -141,16 +148,25 @@ function tablo(doc, r) {
     doc.y = y + 18;
   };
   const satir = (s, kalin = false) => {
-    doc.font(kalin ? 'b' : 'n').fontSize(8.5);
+    const font = kalin ? 'b' : 'n';
+    doc.fontSize(8.5);
     const metinler = r.kolonlar.map((k) => hucre(k, s[k.key]));
-    const h = Math.max(...metinler.map((t, i) => doc.heightOfString(t || ' ', { width: gen[i] - 8 }))) + 8;
-    if (doc.y + h > altSinir()) { doc.addPage(); basliklar(); doc.font(kalin ? 'b' : 'n').fontSize(8.5); }
+    // Sığan hücre tek satırdır; yalnızca sığmayanlar satır kırılarak ölçülür
+    const sigar = metinler.map((t, i) => en(font, t) <= gen[i] - 8);
+    doc.font(font);
+    const tekSatir = doc.currentLineHeight(true);
+    const h = Math.max(...metinler.map((t, i) => (sigar[i] ? tekSatir : doc.heightOfString(t, { width: gen[i] - 8 })))) + 8;
+    if (doc.y + h > altSinir()) { doc.addPage(); basliklar(); doc.font(font).fontSize(8.5); }
     const y = doc.y;
     let x = 36;
     metinler.forEach((t, i) => {
       const k = r.kolonlar[i];
       const neg = k.type === 'bakiye' && s[k.key] > 0;
-      doc.fillColor(neg && !kalin ? '#b0382c' : RENK.koyu).text(t, x + 4, y + 4, { width: gen[i] - 8, align: sag(k) ? 'right' : 'left' });
+      if (t) {
+        doc.fillColor(neg && !kalin ? '#b0382c' : RENK.koyu);
+        if (sigar[i]) doc.text(t, sag(k) ? x + gen[i] - 4 - en(font, t) : x + 4, y + 4, { lineBreak: false });
+        else doc.text(t, x + 4, y + 4, { width: gen[i] - 8, align: sag(k) ? 'right' : 'left' });
+      }
       x += gen[i];
     });
     doc.y = y + h;

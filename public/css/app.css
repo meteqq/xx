@@ -662,3 +662,5 @@ a, button, input, select, textarea, label, .click { touch-action: manipulation; 
   .btn-row.aksiyonlar { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .aksiyonlar .btn.green svg { background: linear-gradient(180deg, #2fb36a, #1d8f50); color: #fff; border: 0; box-shadow: 0 4px 12px rgba(29, 143, 80, .3); }
 }
+.tbl tbody tr.fazla { display: none !important; }
+.daha-fazla { margin: 8px 0 4px; }

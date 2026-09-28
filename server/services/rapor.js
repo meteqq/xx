@@ -51,24 +51,27 @@ function ekstre(p) {
     .all(cari.id).map((f) => [f.id, f]));
   const fisTahsilat = new Map([...faturaBilgi.values()].filter((f) => f.tahsilat_islem_id).map((f) => [f.tahsilat_islem_id, f.id]));
   const ozet = urunOzeti(rows.map((r) => r.fatura_id).filter(Boolean));
+  // Fişin satırı ekstrede varsa, ona ait ödeme satırları fişe katılır (sıradan bağımsız)
+  const fisSatiri = new Set(rows.filter((r) => r.fatura_id).map((r) => `${r.fatura_id}|${r.tarih}`));
+  const katilacak = new Map(); // fatura_id → ödeme satırları
+  for (const r of rows) {
+    const f = fisTahsilat.get(r.islem_id);
+    if (f && fisSatiri.has(`${f}|${r.tarih}`)) (katilacak.get(f) || katilacak.set(f, []).get(f)).push(r);
+  }
   let bakiye = devir;
   const satirlar = [];
   if (p.bas) satirlar.push({ tarih: p.bas, tur: 'Devir', aciklama: 'Önceki dönemden devir', borc: devir > 0 ? devir : 0, alacak: devir < 0 ? -devir : 0, bakiye: devir });
   let tb = devir > 0 ? devir : 0;
   let ta = devir < 0 ? -devir : 0;
   for (const r of rows) {
-    bakiye += r.borc - r.alacak;
-    tb += r.borc;
-    ta += r.alacak;
     const bagliFis = fisTahsilat.get(r.islem_id);
-    const son = satirlar[satirlar.length - 1];
-    if (bagliFis && son?.fatura_id === bagliFis && son.tarih === r.tarih) {
-      son.alacak += r.alacak;
-      son.borc += r.borc;
-      son.bakiye = bakiye;
-      son.sekiller.push(SEKIL_AD[r.odeme_sekli] || 'Diğer');
-      continue;
-    }
+    if (bagliFis && katilacak.get(bagliFis)?.includes(r)) continue;
+    const odemeler = r.fatura_id ? katilacak.get(r.fatura_id) || [] : [];
+    const borc = r.borc + odemeler.reduce((a, x) => a + x.borc, 0);
+    const alacak = r.alacak + odemeler.reduce((a, x) => a + x.alacak, 0);
+    bakiye += borc - alacak;
+    tb += borc;
+    ta += alacak;
     const fis = r.fatura_id && faturaBilgi.get(r.fatura_id)?.belge_tipi === 'fis';
     satirlar.push({
       id: r.id, islem_id: r.islem_id, fatura_id: r.fatura_id || bagliFis || null, cek_id: r.cek_id,
@@ -76,7 +79,7 @@ function ekstre(p) {
       tur: fis ? (r.tur === 'satis_fatura' ? 'Satış Fişi' : 'İade Fişi') : CARI_TUR_AD[r.tur] || r.tur,
       odeme_sekli: r.odeme_sekli ? SEKIL_AD[r.odeme_sekli] : '',
       aciklama: r.fatura_id && ozet.has(r.fatura_id) ? (fis ? ozet.get(r.fatura_id) : `${r.aciklama || ''} · ${ozet.get(r.fatura_id)}`) : r.aciklama,
-      borc: r.borc, alacak: r.alacak, bakiye, sekiller: [],
+      borc, alacak, bakiye, sekiller: odemeler.map((x) => SEKIL_AD[x.odeme_sekli] || 'Diğer'),
     });
   }
   for (const x of satirlar) {
@@ -140,51 +143,6 @@ function bakiyeListesi(p) {
 }
 
 /** FIFO yöntemiyle açık alacakları vadesine göre yaşlandırır. */
-function yaslandirma(p) {
-  const ref = p.bit || bugun();
-  const cariler = db().prepare(`SELECT c.id, c.kod, c.unvan, c.telefon, SUM(h.borc - h.alacak) bakiye
-    FROM cariler c JOIN cari_hareketler h ON h.cari_id = c.id WHERE h.tarih <= ?
-    GROUP BY c.id HAVING bakiye > 0 ORDER BY bakiye DESC`).all(ref);
-  const gun = (a, b) => Math.floor((Date.parse(b) - Date.parse(a)) / 864e5);
-  const satirlar = cariler.map((c) => {
-    const hareketler = db().prepare('SELECT tarih, vade, borc, alacak FROM cari_hareketler WHERE cari_id = ? AND tarih <= ? ORDER BY COALESCE(vade, tarih), id')
-      .all(c.id, ref);
-    let odenen = hareketler.reduce((a, h) => a + h.alacak, 0);
-    const r = { id: c.id, kod: c.kod, unvan: c.unvan, telefon: c.telefon, vadesi_gelmemis: 0, g30: 0, g60: 0, g90: 0, g90p: 0, bakiye: c.bakiye };
-    for (const h of hareketler) {
-      if (!h.borc) continue;
-      const kapanan = Math.min(odenen, h.borc);
-      odenen -= kapanan;
-      const acik = h.borc - kapanan;
-      if (!acik) continue;
-      const g = gun(h.vade || h.tarih, ref);
-      if (g < 0) r.vadesi_gelmemis += acik;
-      else if (g <= 30) r.g30 += acik;
-      else if (g <= 60) r.g60 += acik;
-      else if (g <= 90) r.g90 += acik;
-      else r.g90p += acik;
-    }
-    return r;
-  });
-  const top = (k) => satirlar.reduce((a, r) => a + r[k], 0);
-  return {
-    baslik: 'Alacak Yaşlandırma Raporu',
-    alt: `${trTarih(ref)} itibarıyla, vade tarihine göre (FIFO)`,
-    kolonlar: [
-      { key: 'kod', label: 'Kod' },
-      { key: 'unvan', label: 'Ünvan', link: 'cari' },
-      { key: 'vadesi_gelmemis', label: 'Vadesi Gelmemiş', type: 'money' },
-      { key: 'g30', label: '0-30 Gün', type: 'money' },
-      { key: 'g60', label: '31-60 Gün', type: 'money' },
-      { key: 'g90', label: '61-90 Gün', type: 'money' },
-      { key: 'g90p', label: '90+ Gün', type: 'money' },
-      { key: 'bakiye', label: 'Toplam', type: 'money' },
-    ],
-    satirlar,
-    toplam: Object.fromEntries(['vadesi_gelmemis', 'g30', 'g60', 'g90', 'g90p', 'bakiye'].map((k) => [k, top(k)])),
-  };
-}
-
 function hesapDefteri(p) {
   const hesap = db().prepare('SELECT * FROM hesaplar WHERE id = ?').get(p.hesap_id);
   if (!hesap) throw hata(404, 'Hesap bulunamadı');
@@ -455,7 +413,7 @@ function gunSonu(p) {
 
 const RAPORLAR = {
   gunsonu: gunSonu,
-  ekstre, bakiye: bakiyeListesi, yaslandirma, hesap: hesapDefteri, cek: cekListesi, stok: stokDurum,
+  ekstre, bakiye: bakiyeListesi, hesap: hesapDefteri, cek: cekListesi, stok: stokDurum,
   fatura: faturaOzet, urun: urunSatis, gelirgider: gelirGider, kasa: kasaOzet,
 };
 

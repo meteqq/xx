@@ -7,9 +7,10 @@ const { db, replaceWith } = require('../db');
 const { hata, bugun, gunEkle, sec, secenek, dosyaAdi } = require('../util');
 const { odemeKaydet, islemIptal, SEKIL_AD } = require('../services/islem');
 const { satisKaydet } = require('../services/satis');
-const { TURLER } = require('../services/fatura');
+const { TURLER, faturaIptal } = require('../services/fatura');
 const { rapor, CARI_TUR_AD, HESAP_TIP_AD } = require('../services/rapor');
 const { raporExcel } = require('../services/excel');
+const yedek = require('../yedek');
 const { raporPdf, ekstrePdf, makbuzPdf } = require('../services/pdf');
 
 function pdfGonder(res, buf, ad) {
@@ -54,6 +55,7 @@ r.get('/islemler', (req, res) => {
   if (tur) { kosul.push(tur === 'cek' ? "i.tur LIKE 'cek_%'" : 'i.tur = @tur'); par.tur = tur; }
   if (q) { kosul.push('(i.aciklama LIKE @q OR i.belge_no LIKE @q OR c.unvan LIKE @q)'); par.q = `%${q}%`; }
   // Satışla birlikte alınan tahsilat ayrı işlem olarak listelenmez; ödeme şekli satışın satırında görünür
+  kosul.push("i.tur != 'netsis'");
   if (tur !== 'tahsilat') kosul.push('i.id NOT IN (SELECT tahsilat_islem_id FROM faturalar WHERE tahsilat_islem_id IS NOT NULL)');
   const rows = db().prepare(`SELECT i.*, c.id cari_id, c.unvan cari_unvan, f.id fatura_id, f.belge_tipi, f.tur fatura_tur,
       COALESCE((SELECT SUM(borc + alacak) FROM cari_hareketler WHERE islem_id = i.id AND cari_id = c.id),
@@ -82,7 +84,9 @@ function islemDetay(id) {
     WHERE h.islem_id = ? ORDER BY h.id`).all(i.id).map((h) => ({ ...h, tip_ad: HESAP_TIP_AD[h.tip] }));
   i.cekler = db().prepare('SELECT * FROM cek_senet WHERE id IN (SELECT cek_id FROM cek_hareketleri WHERE islem_id = ?)').all(i.id);
   i.stok = db().prepare(`SELECT s.*, u.ad FROM stok_hareketleri s JOIN urunler u ON u.id = s.urun_id WHERE s.islem_id = ?`).all(i.id);
-  i.fatura = db().prepare('SELECT id, no FROM faturalar WHERE islem_id = ?').get(i.id) || null;
+  i.fatura = db().prepare('SELECT id, no FROM faturalar WHERE islem_id = ?').get(i.id)
+    || db().prepare('SELECT id, no FROM faturalar WHERE tahsilat_islem_id = ? AND iptal = 0').get(i.id) || null;
+  i.geri_alinabilir = i.tur !== 'netsis' && !(i.fatura && i.tur === 'tahsilat');
   i.bakiye = i.cari[0]
     ? db().prepare('SELECT COALESCE(SUM(borc - alacak), 0) b FROM cari_hareketler WHERE cari_id = ?').get(i.cari[0].cari_id).b
     : null;
@@ -98,7 +102,15 @@ r.get('/islemler/:id/pdf', async (req, res) => {
 });
 
 r.delete('/islemler/:id', (req, res) => {
-  islemIptal(req.params.id);
+  const id = Number(req.params.id);
+  // Faturanın işlemi fatura iptaliyle geri alınır (bağlı ödeme de); satışın ödemesi tek başına geri alınamaz
+  const fatura = db().prepare('SELECT id FROM faturalar WHERE islem_id = ? AND iptal = 0').get(id);
+  if (fatura) faturaIptal(fatura.id);
+  else {
+    const satis = db().prepare('SELECT no FROM faturalar WHERE tahsilat_islem_id = ? AND iptal = 0').get(id);
+    if (satis) throw hata(400, `Bu ödeme ${satis.no} satışına ait. Satışı iptal edin.`);
+    islemIptal(id);
+  }
   res.json({ ok: true });
 });
 
@@ -107,9 +119,16 @@ r.get('/ozet', (req, res) => {
   const d = db();
   const t = bugun();
   const ayBas = t.slice(0, 8) + '01';
-  const cariBakiye = d.prepare(`SELECT c.doviz, SUM(CASE WHEN b > 0 THEN b ELSE 0 END) alacak, SUM(CASE WHEN b < 0 THEN -b ELSE 0 END) borc
-    FROM (SELECT c.id, c.doviz, COALESCE(SUM(h.borc - h.alacak), 0) b FROM cariler c
-          LEFT JOIN cari_hareketler h ON h.cari_id = c.id GROUP BY c.id) c GROUP BY c.doviz`).all();
+  // Cari bakiyeleri bir kez hesaplanır; toplamlar, en borçlular ve risk aşanlar bundan çıkar
+  const bakiyeler = d.prepare(`SELECT c.id, c.unvan, c.telefon, c.risk_limiti, c.doviz, SUM(h.borc - h.alacak) bakiye
+    FROM cariler c JOIN cari_hareketler h ON h.cari_id = c.id GROUP BY c.id`).all();
+  const dovizler = new Map();
+  for (const c of bakiyeler) {
+    const x = dovizler.get(c.doviz) || dovizler.set(c.doviz, { doviz: c.doviz, alacak: 0, borc: 0 }).get(c.doviz);
+    if (c.bakiye > 0) x.alacak += c.bakiye;
+    else x.borc -= c.bakiye;
+  }
+  const cariBakiye = [...dovizler.values()];
   const hesaplar = d.prepare(`SELECT h.id, h.tip, h.ad, h.doviz, COALESCE(SUM(x.giris - x.cikis), 0) bakiye
     FROM hesaplar h LEFT JOIN hesap_hareketleri x ON x.hesap_id = h.id WHERE h.aktif = 1 GROUP BY h.id
     ORDER BY CASE h.tip WHEN 'kasa' THEN 1 WHEN 'banka' THEN 2 WHEN 'pos' THEN 3 ELSE 4 END, h.ad`).all();
@@ -128,21 +147,25 @@ r.get('/ozet', (req, res) => {
     const dt = new Date();
     dt.setDate(1);
     dt.setMonth(dt.getMonth() - i);
-    const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    aylar.push({
-      ay: k,
-      satis: d.prepare("SELECT COALESCE(SUM(CASE WHEN tur='satis' THEN genel_toplam ELSE -genel_toplam END), 0) t FROM faturalar WHERE iptal = 0 AND tur IN ('satis','satis_iade') AND substr(tarih, 1, 7) = ?").get(k).t,
-      tahsilat: d.prepare("SELECT COALESCE(SUM(alacak), 0) t FROM cari_hareketler WHERE tur = 'tahsilat' AND substr(tarih, 1, 7) = ?").get(k).t,
-    });
+    aylar.push({ ay: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`, satis: 0, tahsilat: 0 });
+  }
+  const ilkAy = aylar[0].ay + '-01';
+  const ayBul = (k) => aylar.find((a) => a.ay === k);
+  for (const x of d.prepare(`SELECT substr(tarih, 1, 7) ay, SUM(CASE WHEN tur='satis' THEN genel_toplam ELSE -genel_toplam END) t
+    FROM faturalar WHERE iptal = 0 AND tur IN ('satis','satis_iade') AND tarih >= ? GROUP BY ay`).all(ilkAy)) {
+    if (ayBul(x.ay)) ayBul(x.ay).satis = x.t;
+  }
+  for (const x of d.prepare(`SELECT substr(tarih, 1, 7) ay, SUM(alacak) t FROM cari_hareketler
+    WHERE tur = 'tahsilat' AND tarih >= ? GROUP BY ay`).all(ilkAy)) {
+    if (ayBul(x.ay)) ayBul(x.ay).tahsilat = x.t;
   }
 
-  const yas = rapor('yaslandirma', {}).toplam;
   const bugunSatis = d.prepare(`SELECT COUNT(*) adet, COALESCE(SUM(CASE WHEN tur = 'satis' THEN genel_toplam ELSE -genel_toplam END), 0) toplam
     FROM faturalar WHERE iptal = 0 AND tur IN ('satis','satis_iade') AND tarih = ?`).get(t);
   res.json({
     firma: firma(),
     tarih: t,
-    gecikenAlacak: yas.g30 + yas.g60 + yas.g90 + yas.g90p,
+    borcluSayisi: bakiyeler.filter((c) => c.bakiye > 0).length,
     bugunSatis,
     cariBakiye,
     hesaplar,
@@ -160,10 +183,8 @@ r.get('/ozet', (req, res) => {
     yaklasanCekler: d.prepare(`SELECT c.id, c.tur, c.yon, c.no, c.vade, c.tutar, c.durum, ca.unvan FROM cek_senet c
       LEFT JOIN cariler ca ON ca.id = c.cari_id WHERE c.durum IN ('portfoy','tahsilde','verildi') AND c.vade <= ?
       ORDER BY c.vade LIMIT 10`).all(gunEkle(t, 15)),
-    enBorclu: d.prepare(`SELECT c.id, c.unvan, c.telefon, c.risk_limiti, SUM(h.borc - h.alacak) bakiye FROM cariler c
-      JOIN cari_hareketler h ON h.cari_id = c.id GROUP BY c.id HAVING bakiye > 0 ORDER BY bakiye DESC LIMIT 6`).all(),
-    riskAsan: d.prepare(`SELECT c.id, c.unvan, c.risk_limiti, SUM(h.borc - h.alacak) bakiye FROM cariler c
-      JOIN cari_hareketler h ON h.cari_id = c.id WHERE c.risk_limiti > 0 GROUP BY c.id HAVING bakiye > c.risk_limiti`).all(),
+    enBorclu: bakiyeler.filter((c) => c.bakiye > 0).sort((a, b) => b.bakiye - a.bakiye).slice(0, 6),
+    riskAsan: bakiyeler.filter((c) => c.risk_limiti > 0 && c.bakiye > c.risk_limiti),
     kritikStok: d.prepare(`SELECT u.id, u.ad, u.birim, u.kritik_stok, COALESCE(SUM(s.giris - s.cikis), 0) miktar
       FROM urunler u LEFT JOIN stok_hareketleri s ON s.urun_id = u.id WHERE u.aktif = 1 AND u.kritik_stok > 0
       GROUP BY u.id HAVING miktar <= u.kritik_stok ORDER BY miktar LIMIT 10`).all(),
@@ -226,16 +247,18 @@ r.put('/ayarlar', (req, res) => {
 });
 
 // --- Yedekleme ---
-r.get('/yedek', async (req, res) => {
-  const dosya = path.join(os.tmpdir(), `cari-yedek-${Date.now()}.db`);
-  await db().backup(dosya);
+r.get('/yedek', (req, res) => {
+  const dosya = yedek.kopyala(path.join(os.tmpdir(), `cari-yedek-${Date.now()}.db`));
   res.download(dosya, `cari-yedek-${bugun()}.db`, () => fs.rm(dosya, { force: true }, () => {}));
 });
+
+r.get('/yedek/durum', (req, res) => res.json(yedek.durum()));
 
 r.post('/yedek', upload.single('dosya'), (req, res) => {
   if (!req.file) throw hata(400, 'Yedek dosyası seçin');
   try {
-    replaceWith(req.file.path);
+    const saat = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    replaceWith(req.file.path, path.join(yedek.KLASOR, `geri-yukleme-oncesi-${bugun()}-${saat}.db`));
   } catch (e) {
     throw e.status ? e : hata(400, 'Yedek dosyası okunamadı: ' + e.message);
   } finally {

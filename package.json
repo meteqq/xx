@@ -8,6 +8,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "https": "node server/index.js --https",
+    "sifre": "node server/sifre.js",
     "demo": "node server/demo.js",
     "test": "node --test tests/*.test.js",
     "netsis": "node server/netsis/aktar.js"

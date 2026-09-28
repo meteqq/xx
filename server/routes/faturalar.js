@@ -1,8 +1,7 @@
 const express = require('express');
 const { db } = require('../db');
 const { hata, dosyaAdi } = require('../util');
-const { faturaKaydet, faturaGetir, sonrakiNo, TURLER } = require('../services/fatura');
-const { islemIptal } = require('../services/islem');
+const { faturaKaydet, faturaGetir, faturaIptal, sonrakiNo, TURLER } = require('../services/fatura');
 const { faturaPdf } = require('../services/pdf');
 
 const r = express.Router();
@@ -40,15 +39,7 @@ r.post('/', (req, res) => res.status(201).json({ id: faturaKaydet(req.body || {}
 r.put('/:id', (req, res) => res.json({ id: faturaKaydet(req.body || {}, Number(req.params.id)) }));
 
 r.delete('/:id', (req, res) => {
-  const f = db().prepare('SELECT * FROM faturalar WHERE id = ?').get(req.params.id);
-  if (!f || f.iptal) throw hata(404, 'Fatura bulunamadı');
-  if (f.kaynak === 'netsis') throw hata(400, 'Netsis\'ten aktarılan faturalar iptal edilemez');
-  db().transaction(() => {
-    // Satışla birlikte alınan tahsilat da geri alınır
-    if (f.tahsilat_islem_id && db().prepare('SELECT 1 FROM islemler WHERE id = ?').get(f.tahsilat_islem_id)) islemIptal(f.tahsilat_islem_id);
-    if (f.islem_id) islemIptal(f.islem_id);
-    else db().prepare('UPDATE faturalar SET iptal = 1 WHERE id = ?').run(f.id);
-  })();
+  faturaIptal(Number(req.params.id));
   res.json({ ok: true });
 });
 

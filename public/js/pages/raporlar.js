@@ -18,7 +18,6 @@ const RAPORLAR = {
     { name: 'durum', label: 'Bakiye', type: 'select', options: [['bakiyeli', 'Bakiyesi olanlar'], ['', 'Tümü'], ['borclu', 'Borçlular'], ['alacakli', 'Alacaklılar']] },
     { name: 'bit', label: 'Tarih itibarıyla', type: 'date', value: bugun() },
   ] },
-  yaslandirma: { ad: 'Alacak Yaşlandırma', aciklama: 'Açık alacakların vadesine göre gün gruplarına dağılımı', icon: 'clock', filtre: [{ name: 'bit', label: 'Tarih itibarıyla', type: 'date', value: bugun() }] },
   kasa: { ad: 'Kasa / Banka Bakiyeleri', aciklama: 'Tüm hesapların güncel bakiyeleri', icon: 'wallet', filtre: [] },
   hesap: { ad: 'Kasa / Banka Defteri', aciklama: 'Seçilen hesabın giriş-çıkış hareketleri', icon: 'bank', filtre: [{ name: 'hesap_id', label: 'Hesap', type: 'hesap' }, ...tarihler(ayBasi())] },
   cek: { ad: 'Çek / Senet Raporu', aciklama: 'Vadeye göre portföy, verilen evraklar ve durumları', icon: 'cheque', filtre: [
@@ -104,7 +103,7 @@ export async function rapor(ctx) {
     $('#sonuc').innerHTML = tablo({ ...son, kolonlar: kol }, { onRow: true, bos: 'Kayıt yok' });
     tabloBagla($('#sonuc'), son.satirlar, (s) => {
       if (ad === 'ekstre') { if (s.fatura_id) location.hash = `#/fatura/${s.fatura_id}`; else if (s.islem_id) location.hash = `#/islem/${s.islem_id}`; }
-      else if (['bakiye', 'yaslandirma', 'fatura'].includes(ad)) location.hash = `#/cari/${s.id}`;
+      else if (['bakiye', 'fatura'].includes(ad)) location.hash = `#/cari/${s.id}`;
       else if (ad === 'cek') location.hash = `#/cek/${s.id}`;
       else if (ad === 'kasa') location.hash = `#/hesap/${s.id}`;
       else if (ad === 'stok') location.hash = `#/urun/${s.id}`;

@@ -39,6 +39,7 @@ export async function sayfa(ctx) {
             <button class="btn primary" id="yedek-al">${icon('download')} Yedek İndir</button>
             <label class="btn">${icon('upload')} Yedek Yükle<input type="file" id="yedek-yukle" accept=".db,.sqlite" hidden></label>
           </div>
+          <div class="small muted" id="yedek-durum" style="margin-top:10px"></div>
         </div></div>
         <div class="card"><div class="card-h"><h3>Şifre Değiştir</h3></div><div class="card-b">
           <form id="sifre" class="form-grid">
@@ -75,6 +76,9 @@ export async function sayfa(ctx) {
     }
   });
   $('#yedek-al').addEventListener('click', () => indir('/api/yedek'));
+  get('/yedek/durum').then((d) => {
+    if (d.son && $('#yedek-durum')) $('#yedek-durum').textContent = `Son otomatik yedek: ${new Date(d.son).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })} · ${d.adet} gün`;
+  }).catch(() => {});
   $('#tema').addEventListener('click', temaDegistir);
   $('#yedek-yukle').addEventListener('change', async (ev) => {
     const file = ev.target.files[0];

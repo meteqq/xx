@@ -1,3 +1,6 @@
+// Tarihler Türkiye saatine göre (sunucu UTC olsa da gece yarısından sonraki satışlar doğru güne yazılır)
+process.env.TZ = process.env.TZ || 'Europe/Istanbul';
+
 const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -11,7 +14,12 @@ function createApp() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
+  let vekilUyarisi = false;
   app.use((req, res, next) => {
+    if (!vekilUyarisi && req.headers['x-forwarded-for'] && !app.get('trust proxy')) {
+      vekilUyarisi = true;
+      console.warn('Uyarı: istekler bir vekil (nginx) üzerinden geliyor ama TRUST_PROXY ayarlı değil. TRUST_PROXY=1 verin.');
+    }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'same-origin');
@@ -51,9 +59,11 @@ if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
   const app = createApp();
+  auth.kurulumKoduHazirla();
+  if (process.env.YEDEK !== '0') require('./yedek').otomatikYedekBaslat();
   app.listen(port, host, () => {
     console.log(`Cari Takip çalışıyor: http://localhost:${port}`);
-    for (const ip of yerelAdresler()) console.log(`Telefondan: http://${ip}:${port}`);
+    if (host === '0.0.0.0') for (const ip of yerelAdresler()) console.log(`Telefondan: http://${ip}:${port}`);
   });
   const httpsPort = Number(process.env.HTTPS_PORT) || (process.argv.includes('--https') ? 3443 : 0);
   if (httpsPort) {

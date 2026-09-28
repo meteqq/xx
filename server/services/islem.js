@@ -277,6 +277,8 @@ function islemIptal(id) {
   const islemId = Number(id);
   const islem = db().prepare('SELECT * FROM islemler WHERE id = ?').get(islemId);
   if (!islem) throw hata(404, 'İşlem bulunamadı');
+  // Netsis aktarımı tüm geçmişi tek işleme bağlar; geri alınırsa aktarılan her şey silinir
+  if (islem.tur === 'netsis') throw hata(400, 'Netsis\'ten aktarılan kayıtlar geri alınamaz');
 
   return tx(() => {
     // Bu işlemde oluşturulan çek/senetler sonradan başka bir işlem gördüyse iptal edilemez

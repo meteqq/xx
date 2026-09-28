@@ -190,3 +190,21 @@ CREATE TABLE IF NOT EXISTS fatura_kalemleri (
   tutar       INTEGER NOT NULL,         -- iskonto sonrası, KDV hariç
   kdv_tutar   INTEGER NOT NULL
 );
+
+-- İptal (ON DELETE CASCADE) ve işlem/fatura sorguları için
+CREATE INDEX IF NOT EXISTS ix_cari_hareket_islem ON cari_hareketler(islem_id);
+CREATE INDEX IF NOT EXISTS ix_cari_hareket_fatura ON cari_hareketler(fatura_id);
+CREATE INDEX IF NOT EXISTS ix_hesap_hareket_islem ON hesap_hareketleri(islem_id);
+CREATE INDEX IF NOT EXISTS ix_stok_islem ON stok_hareketleri(islem_id);
+CREATE INDEX IF NOT EXISTS ix_cek_hareket_cek ON cek_hareketleri(cek_id);
+CREATE INDEX IF NOT EXISTS ix_cek_hareket_islem ON cek_hareketleri(islem_id);
+CREATE INDEX IF NOT EXISTS ix_cek_cari ON cek_senet(cari_id);
+CREATE INDEX IF NOT EXISTS ix_cek_islem ON cek_senet(islem_id);
+CREATE INDEX IF NOT EXISTS ix_fatura_kalem ON fatura_kalemleri(fatura_id);
+CREATE INDEX IF NOT EXISTS ix_fatura_kalem_urun ON fatura_kalemleri(urun_id);
+CREATE INDEX IF NOT EXISTS ix_fatura_cari ON faturalar(cari_id, tarih);
+CREATE INDEX IF NOT EXISTS ix_fatura_islem ON faturalar(islem_id);
+CREATE INDEX IF NOT EXISTS ix_islem_tarih ON islemler(tarih);
+CREATE INDEX IF NOT EXISTS ix_cari_hareket_tarih ON cari_hareketler(tarih);
+CREATE INDEX IF NOT EXISTS ix_hesap_hareket_tarih ON hesap_hareketleri(tarih);
+CREATE INDEX IF NOT EXISTS ix_fatura_tarih ON faturalar(tarih);

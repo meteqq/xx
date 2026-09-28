@@ -6,6 +6,8 @@ const path = require('path');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cari-test-'));
 process.env.DB_FILE = path.join(dir, 'test.db');
+process.env.KURULUM_KODU = '123456';
+process.env.DATA_DIR = dir;
 const { createApp } = require('../server/index');
 const { close } = require('../server/db');
 
@@ -47,7 +49,9 @@ const hesapBakiye = async (id) => (await get(`/api/hesaplar/${id}`)).bakiye;
 test('kurulum ve giriş', async () => {
   assert.equal((await get('/api/auth/durum')).kurulu, false);
   await assert.rejects(get('/api/cariler'), { status: 401 });
-  await post('/api/auth/kurulum', { sifre: 'gizli123', firma_unvan: 'Test Ltd' });
+  await assert.rejects(post('/api/auth/kurulum', { sifre: 'gizli123', firma_unvan: 'Test Ltd' }), /Kurulum kodu/);
+  await assert.rejects(post('/api/auth/kurulum', { kod: '000000', sifre: 'gizli123' }), /Kurulum kodu/);
+  await post('/api/auth/kurulum', { kod: '123456', sifre: 'gizli123', firma_unvan: 'Test Ltd' });
   assert.deepEqual(await get('/api/auth/durum'), { kurulu: true, girisli: true });
   cookie = '';
   await assert.rejects(post('/api/auth/giris', { sifre: 'yanlis' }), { status: 401 });
@@ -177,8 +181,7 @@ test('raporlar ve Excel', async () => {
   const e = await get(`/api/rapor/ekstre?cari_id=${musteri}`);
   assert.equal(e.toplam.bakiye, 10000);
   assert.equal(e.satirlar.at(-1).bakiye, 10000);
-  const y = await get('/api/rapor/yaslandirma');
-  assert.equal(y.satirlar.find((r) => r.id === musteri).bakiye, 10000);
+  await assert.rejects(get('/api/rapor/yaslandirma'), { status: 404 });
   for (const ad of ['bakiye', 'cek', 'stok', 'fatura', 'urun', 'gelirgider', 'kasa']) {
     const r = await get(`/api/rapor/${ad}`);
     assert.ok(Array.isArray(r.satirlar), ad);
@@ -214,6 +217,20 @@ test('yedek indir ve geri yükle', async () => {
   const res = await fetch(base + '/api/yedek', { method: 'POST', body: fd, headers: { cookie } });
   assert.equal(res.status, 200);
   assert.equal(await bakiye(musteri), once);
+
+  // Geri yüklemeden önceki veriler (999'luk kayıt dahil) saklanmış olmalı
+  const Database = require('better-sqlite3');
+  const onceki = fs.readdirSync(path.join(dir, 'yedekler')).find((f) => f.startsWith('geri-yukleme-oncesi-'));
+  assert.ok(onceki);
+  const eskiDb = new Database(path.join(dir, 'yedekler', onceki), { readonly: true });
+  assert.equal(eskiDb.prepare('SELECT SUM(borc - alacak) b FROM cari_hareketler WHERE cari_id = ?').get(musteri).b, once + 999);
+  eskiDb.close();
+
+  // Günlük otomatik yedek: günde bir kez alınır
+  const oto = require('../server/yedek');
+  assert.ok(fs.existsSync(oto.gunlukYedek()));
+  assert.equal(oto.gunlukYedek(), null);
+  assert.equal((await get('/api/yedek/durum')).adet, 1);
 
   const bozuk = new FormData();
   bozuk.append('dosya', new Blob([Buffer.from('bozuk dosya')]), 'x.db');
@@ -330,4 +347,43 @@ test('satış fişi: ekstre bağlantısı, ürün özeti, müşteriye verilen ü
   assert.equal((await get('/api/ayarlar')).kdv_orani, '10');
   await assert.rejects(api('PUT', '/api/ayarlar', { kdv_orani: '150' }), /KDV/);
   await assert.rejects(api('PUT', '/api/ayarlar', { satis_kdv: 'x' }), /KDV/);
+});
+
+test('korumalar: Netsis işlemi, satışın ödemesi ve fiş düzenleme', async () => {
+  const { db } = require('../server/db');
+  // Netsis aktarım işlemi geri alınamaz ve listede görünmez
+  const netsis = db().prepare("INSERT INTO islemler (tur, tarih, aciklama) VALUES ('netsis', '2026-01-01', 'Netsis aktarımı')").run().lastInsertRowid;
+  db().prepare("INSERT INTO cari_hareketler (islem_id, cari_id, tarih, tur, borc, kaynak) VALUES (?, ?, '2026-01-01', 'aktarim', 500, 'netsis')").run(netsis, musteri);
+  await assert.rejects(api('DELETE', `/api/islemler/${netsis}`), /Netsis/);
+  assert.ok(!(await get('/api/islemler')).some((x) => x.id === Number(netsis)));
+  assert.equal(db().prepare('SELECT COUNT(*) n FROM cari_hareketler WHERE islem_id = ?').get(netsis).n, 1);
+
+  const c = (await post('/api/cariler', { unvan: 'Koruma Test', tip: 'musteri' })).id;
+  const kalem = (m) => [{ aciklama: 'Vida', miktar: m, birim_fiyat: 1990, kdv: 20, kdv_dahil: true }];
+  const kasaOnce = await hesapBakiye(kasa);
+  const s = await post('/api/satis', { odeme: 'nakit', cari_id: c, kalemler: kalem(3) });
+  assert.equal(await hesapBakiye(kasa), kasaOnce + 5970);
+
+  // Satışın ödemesi tek başına geri alınamaz
+  await assert.rejects(api('DELETE', `/api/islemler/${s.tahsilat_islem_id}`), /satışına ait/);
+
+  // Fiş düzenlenince fiş kalır, ödeme bağı korunur; tutar değişemez; tarih değişince ödeme de taşınır
+  const f = await get(`/api/faturalar/${s.fatura_id}`);
+  const govde = (m, t = f.tarih) => ({ tur: 'satis', cari_id: c, tarih: t, vade: t, aciklama: 'not', kalemler: kalem(m) });
+  await api('PUT', `/api/faturalar/${s.fatura_id}`, govde(3, '2026-09-01'));
+  const f2 = await get(`/api/faturalar/${s.fatura_id}`);
+  assert.equal(f2.belge_tipi, 'fis');
+  assert.equal(f2.genel_toplam, 5970);
+  assert.deepEqual(f2.odemeler, [{ odeme_sekli: 'nakit', tutar: 5970 }]);
+  const ek = (await get(`/api/rapor/ekstre?cari_id=${c}`)).satirlar;
+  assert.equal(ek.length, 1);
+  assert.equal(ek[0].tarih, '2026-09-01');
+  await assert.rejects(api('PUT', `/api/faturalar/${s.fatura_id}`, govde(4)), /tutarı değiştirilemez/);
+
+  // Faturanın işlemi Hareketler'den geri alınınca ödemesi de geri alınır
+  const islemId = db().prepare('SELECT islem_id FROM faturalar WHERE id = ?').get(s.fatura_id).islem_id;
+  await api('DELETE', `/api/islemler/${islemId}`);
+  assert.equal(await hesapBakiye(kasa), kasaOnce);
+  assert.equal(await bakiye(c), 0);
+  assert.equal((await get(`/api/faturalar/${s.fatura_id}`)).iptal, 1);
 });

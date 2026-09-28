@@ -23,7 +23,10 @@ npm install
 npm start
 ```
 
-Tarayıcıda `http://localhost:3000` adresini açın. İlk açılışta firma adınızı ve giriş şifrenizi belirlersiniz.
+Tarayıcıda `http://localhost:3000` adresini açın. İlk açılışta firma adınızı ve giriş şifrenizi belirlersiniz;
+bunun için sunucunun açılırken konsola yazdığı **kurulum kodu** istenir (sunucuyu ilk açan yabancı şifre belirleyemesin diye).
+
+Şifreyi unutursanız sunucuda: `npm run sifre -- YeniSifre`
 
 Denemek için örnek verilerle başlamak isterseniz (boş veritabanında):
 
@@ -54,32 +57,44 @@ Sunucu `https://192.168.x.x:3443` adresini de yazar. Telefonda ilk açılışta 
 
 ## Sunucuya kurulum (internetten erişim)
 
-Bir VPS'e (Ubuntu vb.) kurmak için örnek:
+Başka sitelerin de çalıştığı bir Ubuntu sunucuda, alt alan adıyla (ör. `cari.alanadiniz.com`) kurulum:
+
+**1. DNS:** alan adı panelinde `cari` için sunucunun IP'sine bir **A kaydı** ekleyin.
+
+**2. Program** (Node.js 20+ gerekir: `node -v`; yoksa `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs`):
 
 ```bash
-git clone <depo-adresi> cari && cd cari
-npm install --omit=dev
-npm install -g pm2
-PORT=3000 pm2 start server/index.js --name cari
-pm2 save && pm2 startup
+cd /opt && sudo git clone <depo-adresi> cari && sudo chown -R $USER cari && cd cari
+npm ci --omit=dev
+sudo npm install -g pm2
+pm2 start ecosystem.config.cjs
+pm2 logs cari --lines 20     # "Kurulum kodu: ......" satırını not edin
+pm2 save && pm2 startup      # sunucu yeniden başlayınca otomatik açılsın (çıkan komutu çalıştırın)
 ```
 
-İnternete açarken mutlaka HTTPS kullanın. Nginx + Let's Encrypt ile örnek:
+`ecosystem.config.cjs` programı yalnızca `127.0.0.1:3100`'de açar (dışarıdan erişilemez, diğer sitelerle çakışmaz),
+saat dilimini `Europe/Istanbul` yapar ve `TRUST_PROXY=1` verir. Port 3100 doluysa dosyada değiştirin (nginx'te de).
 
-```nginx
-server {
-    server_name cari.alanadiniz.com;
-    client_max_body_size 200m;
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+**3. Nginx + HTTPS:**
+
+```bash
+sudo cp deploy/nginx-cari.conf /etc/nginx/sites-available/cari
+sudo nano /etc/nginx/sites-available/cari        # cari.alanadiniz.com → kendi alan adınız
+sudo ln -s /etc/nginx/sites-available/cari /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d cari.alanadiniz.com      # certbot yoksa: sudo apt install -y certbot python3-certbot-nginx
 ```
 
-Nginx arkasında çalışırken `TRUST_PROXY=1` ortam değişkenini verin (oturum çerezleri HTTPS'te güvenli işaretlenir ve giriş denemesi sınırı doğru IP'ye uygulanır).
+**4.** `https://cari.alanadiniz.com` adresini açın, kurulum kodu + firma adı + şifre ile başlayın.
+Telefonda aynı adresi açıp *Ana ekrana ekle* deyin.
+
+**5. Netsis aktarımı:** aşağıdaki "Netsis'ten aktarım" adımlarını sunucuda `/opt/cari` içinde çalıştırın, sonra `pm2 restart cari`.
+
+**Güncelleme:**
+
+```bash
+cd /opt/cari && git pull && npm ci --omit=dev && pm2 restart cari
+```
 
 ### Ortam değişkenleri
 
@@ -91,6 +106,10 @@ Nginx arkasında çalışırken `TRUST_PROXY=1` ortam değişkenini verin (oturu
 | `DATA_DIR` | `./data` | Veritabanı klasörü |
 | `DB_FILE` | `$DATA_DIR/cari.db` | Veritabanı dosyası |
 | `TRUST_PROXY` | kapalı | Ters vekil (nginx) arkasında `1` yapın |
+| `TZ` | `Europe/Istanbul` | Tarihlerin hesaplandığı saat dilimi |
+| `YEDEK_DIR` | `$DATA_DIR/yedekler` | Otomatik yedek klasörü |
+| `YEDEK_GUN` | `30` | Saklanacak günlük yedek sayısı |
+| `KURULUM_KODU` | rastgele | İlk kurulum kodu (verilmezse açılışta üretilip konsola yazılır) |
 
 ## Netsis'ten aktarım
 
@@ -138,8 +157,13 @@ NETSIS_SIFRE='...' npm run netsis -- aktar --veritabani FIRMA2026
 
 ## Yedekleme
 
-Tüm veriler tek bir SQLite dosyasında (`data/cari.db`) tutulur. *Ayarlar → Yedek İndir* ile dosyayı indirebilir,
-*Yedekten Geri Yükle* ile geri dönebilirsiniz. Sunucuda otomatik yedek için `data/` klasörünü düzenli olarak kopyalamanız yeterlidir.
+Tüm veriler tek bir SQLite dosyasında (`data/cari.db`) tutulur.
+
+- **Otomatik:** sunucu her gün `data/yedekler/cari-YYYY-MM-DD.db` yedeğini alır, son 30 günü saklar.
+- **Elle:** *Ayarlar → Yedek İndir*. *Yedek Yükle* ile geri dönülür; yüklemeden önceki veriler
+  `data/yedekler/geri-yukleme-oncesi-*.db` olarak saklanır.
+- Yedekler aynı diskte durduğu için arada bir sunucu dışına da alın (ör. bilgisayarınızdan
+  `scp sunucu:/opt/cari/data/yedekler/cari-*.db .` ya da *Yedek İndir*).
 
 ## Hesap mantığı
 

@@ -61,9 +61,10 @@ temaUygula();
 function girisEkrani(kurulu) {
   $('#app').innerHTML = `<div class="auth"><form class="card" id="auth-form">
     <div class="brand"><div class="logo">₺</div><div>Cari Takip</div></div>
-    ${kurulu ? '' : `<label class="f" style="margin-bottom:12px"><span>Firma adı</span><input name="firma_unvan" autocomplete="organization"></label>`}
-    <label class="f" style="margin-bottom:12px"><span>Şifre</span>
-      <input name="sifre" type="password" autocomplete="${kurulu ? 'current-password' : 'new-password'}" required autofocus></label>
+    ${kurulu ? '' : `<label class="f" style="margin-bottom:12px"><span>Kurulum kodu</span><input name="kod" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <label class="f" style="margin-bottom:12px"><span>Firma adı</span><input name="firma_unvan" autocomplete="organization"></label>`}
+    <label class="f" style="margin-bottom:12px"><span>${kurulu ? 'Şifre' : 'Yeni şifre'}</span>
+      <input name="sifre" type="password" autocomplete="${kurulu ? 'current-password' : 'new-password'}" required ${kurulu ? 'autofocus' : ''}></label>
     ${kurulu ? '' : '<label class="f" style="margin-bottom:12px"><span>Şifre tekrar</span><input name="sifre2" type="password" autocomplete="new-password" required></label>'}
     <button class="btn primary block lg" type="submit">Giriş</button>
   </form></div>`;
@@ -76,7 +77,7 @@ function girisEkrani(kurulu) {
       if (kurulu) await post('/auth/giris', { sifre: f.sifre.value });
       else {
         if (f.sifre.value !== f.sifre2.value) throw new Error('Şifreler aynı değil');
-        await post('/auth/kurulum', { sifre: f.sifre.value, firma_unvan: f.firma_unvan.value.trim() });
+        await post('/auth/kurulum', { kod: f.kod.value.trim(), sifre: f.sifre.value, firma_unvan: f.firma_unvan.value.trim() });
       }
       baslat();
     } catch (err) {

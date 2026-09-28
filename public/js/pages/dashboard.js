@@ -20,7 +20,7 @@ export async function sayfa(ctx) {
   <div class="grid g4">
     ${panel('#/faturalar?tur=satis', 'Bugünkü satış', tl(d.bugunSatis.toplam), `${d.bugunSatis.adet} satış`)}
     ${panel('#/cariler?tip=musteri&durum=borclu', 'Tahsil edilecek', tl(tr.alacak),
-      d.gecikenAlacak ? `<span class="neg">Gecikmiş ${tl(d.gecikenAlacak)}</span>` : 'Gecikmiş yok')}
+      d.borcluSayisi ? `${d.borcluSayisi} cari` : '&nbsp;')}
     ${panel('#/cariler?tip=tedarikci&durum=alacakli', 'Ödenecek', tl(tr.borc),
       d.cek.verilen.adet ? `Çek / senet ${tl(d.cek.verilen.tutar)}` : '&nbsp;')}
     ${panel('#/kasa', 'Kasa ve bankalar', tl(nakit),
