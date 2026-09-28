@@ -85,7 +85,7 @@ export async function detay(ctx) {
       <button class="btn" id="diger">${icon('dots')} Diğer</button>
     </div></div></div>
     <div class="card" style="margin-top:16px"><div class="card-h"><h3>Stok Hareketleri</h3></div><div id="hareket"></div></div>`;
-  const TUR = { satis: 'Satış', alis: 'Alış', satis_iade: 'Satış İade', alis_iade: 'Alış İade', sayim: 'Sayım', giris: 'Giriş', cikis: 'Çıkış', acilis: 'Açılış' };
+  const TUR = { satis: 'Satış', alis: 'Alış', satis_iade: 'Satış İade', alis_iade: 'Alış İade', sayim: 'Sayım', giris: 'Giriş', cikis: 'Çıkış', acilis: 'Açılış', aktarim: 'Netsis' };
   $('#hareket').innerHTML = tablo({
     kolonlar: [
       { key: 'tarih', label: 'Tarih', type: 'date' },

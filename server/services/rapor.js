@@ -12,7 +12,7 @@ const aralikYazi = (p) => (p.bas || p.bit ? `${trTarih(p.bas) || '...'} - ${trTa
 const CARI_TUR_AD = {
   acilis: 'Açılış', satis_fatura: 'Satış Faturası', alis_fatura: 'Alış Faturası', tahsilat: 'Tahsilat',
   odeme: 'Ödeme', satis_iade: 'Satış İade', alis_iade: 'Alış İade', cek_iade: 'Evrak İade', mahsup: 'Mahsup',
-  borc_dekont: 'Borç Dekontu', alacak_dekont: 'Alacak Dekontu',
+  borc_dekont: 'Borç Dekontu', alacak_dekont: 'Alacak Dekontu', aktarim: 'Netsis',
 };
 const HESAP_TIP_AD = { kasa: 'Kasa', banka: 'Banka', pos: 'POS', kart: 'Kredi Kartı' };
 const CEK_DURUM_AD = {

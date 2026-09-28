@@ -26,7 +26,7 @@ const ISLEM_TUR_AD = {
   acilis: 'Açılış', borc_dekont: 'Borç Dekontu', alacak_dekont: 'Alacak Dekontu', stok: 'Stok',
   cek_tahsile_ver: 'Çek Tahsile Verildi', cek_tahsil: 'Evrak Tahsil', cek_ciro: 'Evrak Ciro',
   cek_karsiliksiz: 'Karşılıksız Evrak', cek_iade: 'Evrak İade', cek_portfoye_al: 'Portföye Alındı',
-  cek_ode: 'Evrak Ödendi', cek_geri_al: 'Evrak Geri Alındı',
+  cek_ode: 'Evrak Ödendi', cek_geri_al: 'Evrak Geri Alındı', netsis: 'Netsis Aktarımı',
 };
 
 function firma() {

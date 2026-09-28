@@ -2,6 +2,9 @@
 
 Web tabanlı, telefondan ve bilgisayardan kullanılabilen cari hesap takip programı.
 
+- **Hızlı satış (F2):** barkod okut / ürün seç, Nakit · Kredi Kartı · Veresiye · Parçalı ile tek tıkla satış, 80 mm fiş, Gün Sonu raporu
+- **Çıktılar:** ekstre, fatura, fiş, makbuz ve raporlar için Yazdır · PDF · Excel · **Gönder** (telefonda WhatsApp/e-posta paylaşımı)
+- **Netsis'ten aktarım:** cariler, tüm cari hareketleri (ekstre geçmişi), stoklar ve stok hareketleri, faturalar, çek/senetler, kasalar
 - **Cariler:** müşteri/tedarikçi kartları, risk limiti, vade günü, varsayılan iskonto, açılış bakiyesi, borç/alacak dekontu, ekstre (yazdır/PDF/Excel), WhatsApp ile bakiye bildirimi
 - **Tahsilat / Ödeme:** nakit, kredi kartı (POS komisyonu ve valör dahil), havale/EFT, çek, senet, cari mahsup ve diğer (müşteri kartı, hediye çeki vb.). Bir işlemde birden fazla ödeme şekli (parçalı ödeme), makbuz yazdırma
 - **Kasa & Banka:** kasa, banka, POS ve firma kredi kartı hesapları, gelir/masraf girişi (kategorili), hesaplar arası virman, hesap defteri
@@ -76,6 +79,50 @@ Nginx arkasında çalışırken `TRUST_PROXY=1` ortam değişkenini verin (oturu
 | `DATA_DIR` | `./data` | Veritabanı klasörü |
 | `DB_FILE` | `$DATA_DIR/cari.db` | Veritabanı dosyası |
 | `TRUST_PROXY` | kapalı | Ters vekil (nginx) arkasında `1` yapın |
+
+## Netsis'ten aktarım
+
+Netsis verisi SQL Server'da durur; `.bak` yedeği önce bir SQL Server'a geri yüklenmelidir.
+
+**1. Yedeği aç** (sunucuda Docker gerekir, ~2 GB bellek):
+
+```bash
+scripts/netsis-yedek-ac.sh /yol/NETSIS_FIRMA_2026.bak
+```
+
+Betik geçici bir SQL Server açar, yedeği yükler ve bağlantı bilgilerini (şifre dahil) ekrana yazar.
+Docker yoksa: bir Windows bilgisayara ücretsiz **SQL Server Express** + **SSMS** kurup yedeği
+*Databases → Restore Database* ile yükleyin; aşağıdaki komutlarda `--sunucu` olarak o bilgisayarın IP'sini verin.
+
+**2. Keşif** — hangi tablolar bulundu, kaç kayıt var, çek/senet durum kodları neler:
+
+```bash
+NETSIS_SIFRE='...' npm run netsis -- kesif                        # veritabanlarını listeler
+NETSIS_SIFRE='...' npm run netsis -- kesif --veritabani FIRMA2026
+```
+
+**3. Deneme** — hiçbir şey yazmadan sayıları ve kontrol toplamlarını gösterir:
+
+```bash
+NETSIS_SIFRE='...' npm run netsis -- aktar --veritabani FIRMA2026 --deneme
+```
+
+"Cari bakiye toplamı" ve "Stok miktar toplamı" satırlarında **✔ tutuyor** görünmeli; ayrıca birkaç carinin
+bakiyesini Netsis raporlarıyla karşılaştırın.
+
+**4. Aktar:**
+
+```bash
+NETSIS_SIFRE='...' npm run netsis -- aktar --veritabani FIRMA2026
+```
+
+- Aktarım tek seferde yapılır; hata olursa hiçbir şey yazılmaz.
+- Programda kayıt varsa aktarım durur; üzerine yazmak için `--temizle` (önce otomatik yedek alınır).
+- Tüm aktarılanlar *Hareketler* sayfasında tek bir "Netsis Aktarımı" işlemi olarak görünür.
+- Netsis faturaları arşiv olarak gelir: görüntülenir, yazdırılır, gönderilir ama düzenlenemez.
+- Netsis sürümüne göre kolon adı farklıysa ya da keşifte bir alan "bulunamayan" görünüyorsa
+  `server/netsis/esleme.js` dosyasına kolon adını eklemek yeterlidir. Çek/senet durum kodları da orada eşlenir.
+- İş bitince: `scripts/netsis-yedek-ac.sh --kapat`
 
 ## Yedekleme
 
