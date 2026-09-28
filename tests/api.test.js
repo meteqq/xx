@@ -274,11 +274,24 @@ test('satış fişi: ekstre bağlantısı, ürün özeti, müşteriye verilen ü
   ] });
   assert.equal(s.toplam, 21500);
 
-  // Ekstredeki fiş ve tahsilat satırları aynı fişe bağlanır; fiş satırı ürünleri özetler
+  // Peşin satış ekstrede tek satırdır: Satış Fişi · ürünler · ödeme şekli
   const ek = await get(`/api/rapor/ekstre?cari_id=${c}`);
-  assert.equal(ek.satirlar.length, 2);
-  assert.ok(ek.satirlar.every((r) => r.fatura_id === s.fatura_id));
-  assert.match(ek.satirlar.find((r) => r.borc).aciklama, /2 × Çimento, 3 × Kum/);
+  assert.equal(ek.satirlar.length, 1);
+  const [fisSatir] = ek.satirlar;
+  assert.equal(fisSatir.fatura_id, s.fatura_id);
+  assert.equal(fisSatir.tur, 'Satış Fişi');
+  assert.equal(fisSatir.borc, 21500);
+  assert.equal(fisSatir.alacak, 21500);
+  assert.equal(fisSatir.bakiye, 0);
+  assert.match(fisSatir.aciklama, /2 × Çimento, 3 × Kum · Nakit$/);
+  assert.deepEqual(ek.toplam, { borc: 21500, alacak: 21500, bakiye: 0 });
+
+  // Hareketler listesinde de satış tek satır; tahsilatı ayrıca görünmez
+  const hareketler = await get('/api/islemler');
+  assert.ok(!hareketler.some((x) => x.id === s.tahsilat_islem_id));
+  const satisHareket = hareketler.find((x) => x.fatura_id === s.fatura_id);
+  assert.equal(satisHareket.tur_ad, 'Satış Fişi');
+  assert.equal(satisHareket.sekiller_ad, 'Nakit');
 
   // Fiş ödeme bilgisini taşır
   const f = await get(`/api/faturalar/${s.fatura_id}`);
@@ -289,6 +302,16 @@ test('satış fişi: ekstre bağlantısı, ürün özeti, müşteriye verilen ü
     kalemler: [{ urun_id: cimento, aciklama: 'Çimento', miktar: 1, birim_fiyat: 10000, kdv: 20 }] });
   assert.equal(s2.toplam, 12000);
   assert.deepEqual((await get(`/api/faturalar/${s2.fatura_id}`)).odemeler, []);
+
+  // Parçalı: nakit + kart, kalanı veresiye; yine tek satır
+  const s3 = await post('/api/satis', { odeme: 'parcali', cari_id: c, nakit: 5000, kart: 3000,
+    kalemler: [{ urun_id: cimento, aciklama: 'Çimento', miktar: 1, birim_fiyat: 10000, kdv: 20 }] });
+  const ek2 = (await get(`/api/rapor/ekstre?cari_id=${c}`)).satirlar;
+  assert.equal(ek2.length, 3);
+  assert.match(ek2[1].aciklama, /· Veresiye$/);
+  assert.match(ek2[2].aciklama, /· Nakit \+ Kredi Kartı \(kalan 20,00 veresiye\)$/);
+  assert.equal(ek2[2].bakiye, 12000 + 2000);
+  await api('DELETE', `/api/faturalar/${s3.fatura_id}`);
 
   // Müşteriye verilen ürünler: ürün bazında toplam adet ve KDV dahil tutar
   const u = await get(`/api/rapor/urun?cari_id=${c}`);

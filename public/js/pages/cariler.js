@@ -3,6 +3,7 @@ import { e, $, $$, icon, tl, tarih, miktar, bakiye, toast, modal, formModal, ona
 import { CARI_TIP, DOVIZ, CEK_DURUM } from '../sabitler.js';
 import { ekstreYazdir, raporYazdir } from '../yazdir.js';
 import { faturaPopup } from './fatura.js';
+import { aksiyon } from '../aksiyon.js';
 import { ciktiDugmeleri, gonder } from '../cikti.js';
 
 // ---------- Cari formu (başka sayfalardan da kullanılır) ----------
@@ -123,6 +124,7 @@ export async function detay(ctx) {
   const tel = (c.telefon || '').replace(/\D/g, '');
   const wa = tel ? (tel.startsWith('90') ? tel : tel.startsWith('0') ? '9' + tel : '90' + tel) : '';
   const riskAsim = c.risk_limiti > 0 && c.bakiye > c.risk_limiti;
+  const tedarikci = c.tip === 'tedarikci';
 
   ctx.el.innerHTML = `
     <div class="card"><div class="card-b">
@@ -142,9 +144,11 @@ export async function detay(ctx) {
         </div>
       </div>
       <div class="btn-row aksiyonlar">
-        <button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')}<span>Tahsilat<span class="m-gizle"> Ekle</span></span></button>
-        <button class="btn" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')}<span>Ödeme<span class="m-gizle"> Ekle</span></span></button>
-        <button class="btn" data-aksiyon="fatura-${c.tip === 'tedarikci' ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')}<span>Fatura</span></button>
+        ${tedarikci ? '' : `<button class="btn green" data-aksiyon="satis" data-cari="${c.id}">${icon('cash')}<span>Satış<span class="m-gizle"> Yap</span></span></button>`}
+        ${tedarikci
+          ? `<button class="btn primary" data-aksiyon="odeme" data-cari="${c.id}">${icon('out')}<span>Ödeme<span class="m-gizle"> Ekle</span></span></button>`
+          : `<button class="btn primary" data-aksiyon="tahsilat" data-cari="${c.id}">${icon('in')}<span>Tahsilat<span class="m-gizle"> Ekle</span></span></button>`}
+        <button class="btn" data-aksiyon="fatura-${tedarikci ? 'alis' : 'satis'}" data-cari="${c.id}">${icon('invoice')}<span>Fatura</span></button>
         <button class="btn purple" id="ekstre-gonder">${icon('share')}<span><span class="m-gizle">Ekstre </span>Gönder</span></button>
         <button class="btn" id="diger" aria-label="Diğer">${icon('dots')}<span class="m-goster">Diğer</span></button>
       </div>
@@ -193,6 +197,7 @@ export async function detay(ctx) {
     location.hash = `#/cariler?tip=${c.tip === 'tedarikci' ? 'tedarikci' : 'musteri'}`;
   };
   $('#diger').addEventListener('click', (ev) => menu('Diğer', [
+    tedarikci ? ['Tahsilat ekle', 'in', () => aksiyon('tahsilat', { cari: c.id }, ctx.yenile)] : ['Ödeme ekle', 'out', () => aksiyon('odeme', { cari: c.id }, ctx.yenile)],
     [c.tip === 'tedarikci' ? 'Satış faturası' : 'Alış faturası', 'invoice', () => { location.hash = `#/fatura/yeni?tur=${c.tip === 'tedarikci' ? 'satis' : 'alis'}&cari=${c.id}`; }],
     ['Borç / alacak kaydı', 'receipt', dekont],
     ['Düzenle', 'edit', () => cariFormu(c, { onKaydet: () => ctx.yenile() })],

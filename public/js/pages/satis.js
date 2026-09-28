@@ -153,10 +153,10 @@ export async function satisAc({ cariId, onKaydet } = {}) {
         kalemler: sepet.map((s) => ({ urun_id: s.urun_id, aciklama: s.ad, miktar: s.miktar, birim: s.birim, birim_fiyat: s.fiyat, kdv: s.kdv })),
       });
       toast(`Satış kaydedildi · ${tl(r.toplam)}`, 'ok', { etiket: 'Fiş', fn: async () => fisYazdir(await get(`/faturalar/${r.fatura_id}`)) });
+      // Müşteri seçili kalır (güncel bakiyesiyle): aynı müşteriye art arda satış yapılabilir
       sepet = [];
-      cari = null;
-      cariKutusu();
       ciz();
+      if (cari) { cari = await get(`/cariler/${cari.id}`); cariKutusu(); }
       ara.focus();
       onKaydet?.(r);
     } catch (err) {

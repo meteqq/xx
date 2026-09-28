@@ -1,4 +1,5 @@
 import { get, del } from '../api.js';
+import { faturaPopup } from './fatura.js';
 import { e, $, icon, tarih, toast, onayla, tablo, tabloBagla, debounce, qs } from '../ui.js';
 import { makbuzYazdir } from '../yazdir.js';
 import { ciktiDugmeleri } from '../cikti.js';
@@ -20,13 +21,13 @@ export async function liste(ctx) {
     $('#liste').innerHTML = tablo({
       kolonlar: [
         { key: 'tarih', label: 'Tarih', type: 'date' },
-        { key: 'tur_ad', label: 'İşlem', render: (v, s) => `<span class="badge ${s.tur === 'tahsilat' ? 'green' : s.tur === 'odeme' || s.tur === 'gider' ? 'red' : 'blue'}">${e(v)}</span>` },
-        { key: 'cari_unvan', label: 'Cari / Açıklama', main: true, render: (v, s) => e(v || s.aciklama || '-') },
+        { key: 'tur_ad', label: 'İşlem', render: (v, s) => `<span class="badge ${s.tur === 'tahsilat' || s.belge_tipi === 'fis' ? 'green' : s.tur === 'odeme' || s.tur === 'gider' ? 'red' : 'blue'}">${e(v)}</span>` },
+        { key: 'cari_unvan', label: 'Cari / Açıklama', main: true, render: (v, s) => `${e(v || s.aciklama || '-')}${s.sekiller_ad ? ` <span class="muted small">· ${e(s.sekiller_ad)}</span>` : ''}` },
         { key: 'tutar', label: 'Tutar', type: 'money' },
       ],
       satirlar: rows,
     }, { onRow: true, bos: 'Kayıt yok' });
-    tabloBagla($('#liste'), rows, (s) => { location.hash = `#/islem/${s.id}`; });
+    tabloBagla($('#liste'), rows, (s) => (s.fatura_id ? faturaPopup(s.fatura_id, { onDegis: yukle }) : (location.hash = `#/islem/${s.id}`)));
   };
   $('#q').addEventListener('input', debounce(yukle));
   $('#tur').addEventListener('change', yukle);

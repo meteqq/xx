@@ -20,6 +20,7 @@ const CEK_DURUM_AD = {
   karsiliksiz: 'Karşılıksız', iade: 'İade', verildi: 'Ödenecek', odendi: 'Ödendi',
 };
 
+const para = (k) => (k / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const miktarYazi = (m) => (Number.isInteger(m) ? String(m) : String(Math.round(m * 1000) / 1000).replace('.', ','));
 
 /** fatura id → "2 × Çimento, 1 × Kum +3" */
@@ -45,9 +46,10 @@ function ekstre(p) {
     .get(cari.id, bas).b;
   const rows = db().prepare(`SELECT * FROM cari_hareketler WHERE cari_id = ? AND tarih BETWEEN ? AND ?
     ORDER BY tarih, id`).all(cari.id, bas, bit);
-  // Satışla birlikte alınan tahsilat, ait olduğu fişe bağlanır; fiş/fatura satırlarına ürün özeti eklenir
-  const fisTahsilat = new Map(db().prepare('SELECT tahsilat_islem_id i, id FROM faturalar WHERE cari_id = ? AND tahsilat_islem_id IS NOT NULL')
-    .all(cari.id).map((r) => [r.i, r.id]));
+  // Satışla birlikte alınan tahsilat ayrı satır olarak görünmez; fişin satırına işlenir (Satış Fişi · ürünler · Nakit)
+  const faturaBilgi = new Map(db().prepare('SELECT id, belge_tipi, tahsilat_islem_id FROM faturalar WHERE cari_id = ?')
+    .all(cari.id).map((f) => [f.id, f]));
+  const fisTahsilat = new Map([...faturaBilgi.values()].filter((f) => f.tahsilat_islem_id).map((f) => [f.tahsilat_islem_id, f.id]));
   const ozet = urunOzeti(rows.map((r) => r.fatura_id).filter(Boolean));
   let bakiye = devir;
   const satirlar = [];
@@ -58,13 +60,32 @@ function ekstre(p) {
     bakiye += r.borc - r.alacak;
     tb += r.borc;
     ta += r.alacak;
+    const bagliFis = fisTahsilat.get(r.islem_id);
+    const son = satirlar[satirlar.length - 1];
+    if (bagliFis && son?.fatura_id === bagliFis && son.tarih === r.tarih) {
+      son.alacak += r.alacak;
+      son.borc += r.borc;
+      son.bakiye = bakiye;
+      son.sekiller.push(SEKIL_AD[r.odeme_sekli] || 'Diğer');
+      continue;
+    }
+    const fis = r.fatura_id && faturaBilgi.get(r.fatura_id)?.belge_tipi === 'fis';
     satirlar.push({
-      id: r.id, islem_id: r.islem_id, fatura_id: r.fatura_id || fisTahsilat.get(r.islem_id) || null, cek_id: r.cek_id,
-      tarih: r.tarih, vade: r.vade, belge_no: r.belge_no, tur: CARI_TUR_AD[r.tur] || r.tur,
+      id: r.id, islem_id: r.islem_id, fatura_id: r.fatura_id || bagliFis || null, cek_id: r.cek_id,
+      tarih: r.tarih, vade: fis ? null : r.vade, belge_no: r.belge_no,
+      tur: fis ? (r.tur === 'satis_fatura' ? 'Satış Fişi' : 'İade Fişi') : CARI_TUR_AD[r.tur] || r.tur,
       odeme_sekli: r.odeme_sekli ? SEKIL_AD[r.odeme_sekli] : '',
-      aciklama: r.fatura_id && ozet.has(r.fatura_id) ? `${r.aciklama || ''} · ${ozet.get(r.fatura_id)}` : r.aciklama,
-      borc: r.borc, alacak: r.alacak, bakiye,
+      aciklama: r.fatura_id && ozet.has(r.fatura_id) ? (fis ? ozet.get(r.fatura_id) : `${r.aciklama || ''} · ${ozet.get(r.fatura_id)}`) : r.aciklama,
+      borc: r.borc, alacak: r.alacak, bakiye, sekiller: [],
     });
+  }
+  for (const x of satirlar) {
+    if (x.tur === 'Satış Fişi' && !x.sekiller.length) x.aciklama = `${x.aciklama} · Veresiye`;
+    else if (x.sekiller?.length) {
+      const odenen = x.alacak;
+      x.aciklama = `${x.aciklama} · ${[...new Set(x.sekiller)].join(' + ')}${odenen < x.borc ? ` (kalan ${para(x.borc - odenen)} veresiye)` : ''}`;
+    }
+    delete x.sekiller;
   }
   return {
     baslik: `Cari Hesap Ekstresi - ${cari.unvan}`,

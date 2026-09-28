@@ -7,6 +7,7 @@ const { db, replaceWith } = require('../db');
 const { hata, bugun, gunEkle, sec, secenek, dosyaAdi } = require('../util');
 const { odemeKaydet, islemIptal, SEKIL_AD } = require('../services/islem');
 const { satisKaydet } = require('../services/satis');
+const { TURLER } = require('../services/fatura');
 const { rapor, CARI_TUR_AD, HESAP_TIP_AD } = require('../services/rapor');
 const { raporExcel } = require('../services/excel');
 const { raporPdf, ekstrePdf, makbuzPdf } = require('../services/pdf');
@@ -52,17 +53,21 @@ r.get('/islemler', (req, res) => {
   if (bit) { kosul.push('i.tarih <= @bit'); par.bit = bit; }
   if (tur) { kosul.push(tur === 'cek' ? "i.tur LIKE 'cek_%'" : 'i.tur = @tur'); par.tur = tur; }
   if (q) { kosul.push('(i.aciklama LIKE @q OR i.belge_no LIKE @q OR c.unvan LIKE @q)'); par.q = `%${q}%`; }
-  const rows = db().prepare(`SELECT i.*, c.id cari_id, c.unvan cari_unvan,
+  // Satışla birlikte alınan tahsilat ayrı işlem olarak listelenmez; ödeme şekli satışın satırında görünür
+  if (tur !== 'tahsilat') kosul.push('i.id NOT IN (SELECT tahsilat_islem_id FROM faturalar WHERE tahsilat_islem_id IS NOT NULL)');
+  const rows = db().prepare(`SELECT i.*, c.id cari_id, c.unvan cari_unvan, f.id fatura_id, f.belge_tipi, f.tur fatura_tur,
       COALESCE((SELECT SUM(borc + alacak) FROM cari_hareketler WHERE islem_id = i.id AND cari_id = c.id),
                (SELECT MAX(SUM(giris), SUM(cikis)) FROM hesap_hareketleri WHERE islem_id = i.id), 0) tutar,
-      (SELECT group_concat(DISTINCT odeme_sekli) FROM cari_hareketler WHERE islem_id = i.id) sekiller
+      (SELECT group_concat(DISTINCT odeme_sekli) FROM cari_hareketler WHERE islem_id = COALESCE(f.tahsilat_islem_id, i.id)) sekiller
     FROM islemler i
+    LEFT JOIN faturalar f ON f.islem_id = i.id
     LEFT JOIN cariler c ON c.id = (SELECT cari_id FROM cari_hareketler WHERE islem_id = i.id ORDER BY id LIMIT 1)
     WHERE ${kosul.join(' AND ')} ORDER BY i.tarih DESC, i.id DESC LIMIT ${Math.min(Number(req.query.limit) || 300, 1000)}`).all(par);
   res.json(rows.map((x) => ({
     ...x,
-    tur_ad: ISLEM_TUR_AD[x.tur] || x.tur,
-    sekiller_ad: (x.sekiller || '').split(',').filter(Boolean).map((s) => SEKIL_AD[s]).join(', '),
+    tur_ad: x.belge_tipi === 'fis' ? 'Satış Fişi' : x.fatura_tur ? TURLER[x.fatura_tur]?.ad || ISLEM_TUR_AD.fatura : ISLEM_TUR_AD[x.tur] || x.tur,
+    sekiller_ad: (x.sekiller || '').split(',').filter(Boolean).map((s) => SEKIL_AD[s]).join(', ')
+      || (x.belge_tipi === 'fis' ? 'Veresiye' : ''),
   })));
 });
 

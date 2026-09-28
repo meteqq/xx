@@ -102,8 +102,7 @@ export async function faturaYazdir(f) {
     <p>Yalnız <b>${e(yaziyla(f.genel_toplam))}</b></p>
     ${f.aciklama ? `<p class="note">Not: ${e(f.aciklama)}</p>` : ''}
     ${a.fatura_notu ? `<p class="note">${e(a.fatura_notu)}</p>` : ''}
-    ${a.firma_iban ? `<p class="note">IBAN: ${e(a.firma_iban)}</p>` : ''}
-    <div class="sign"><div>Teslim Eden</div><div>Teslim Alan</div></div>`);
+    ${a.firma_iban ? `<p class="note">IBAN: ${e(a.firma_iban)}</p>` : ''}`);
 }
 
 /** Tutarı Türkçe yazıya çevirir: 1234,50 → "BinİkiYüzOtuzDörtTL ElliKr" */
